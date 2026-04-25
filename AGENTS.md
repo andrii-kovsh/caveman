@@ -18,3 +18,10 @@ Session visibility preference:
 - Use `set-dashboard-browser-igpu-preference.ps1` to ask Windows to run Edge/Chrome on the power-saving integrated GPU. This may affect that browser executable globally, not only the dashboard tab.
 - The status server must stay low-resource: cached scans default to 30 seconds and max 2000 files. Avoid returning to 2-second full recursive scans.
 - Usage limits are now sourced from local Codex `codex.rate_limits` websocket events in `C:\Users\koban\.codex\logs_2.sqlite`, exposed through `/api/limits`, and refreshed in the UI about every 5 minutes.
+
+Git workflow preference:
+- Apply this by default across projects: do not develop directly on `main` / `master`.
+- Put implementation changes on a separate `development` branch or a scoped feature branch.
+- Keep logically separate changes as separate commits.
+- Push the work branch and create a pull request for user review before merge.
+- Do not create/push a PR until the remote/auth state is verified and the user has approved the outbound GitHub action.
