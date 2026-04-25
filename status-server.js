@@ -2,6 +2,12 @@ const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
+let DatabaseSync = null;
+try {
+  ({ DatabaseSync } = require("node:sqlite"));
+} catch {
+  DatabaseSync = null;
+}
 
 const root = __dirname;
 const port = Number(process.env.CODEX_STATUS_PORT || 8765);
@@ -9,11 +15,15 @@ const startedAt = new Date();
 const statePath = path.join(root, ".codex-status-state.json");
 const commandLogPath = path.join(root, ".codex-command-log.jsonl");
 const dashboardPath = path.join(root, "codex-live-dashboard.html");
+const codexLogsDbPath = process.env.CODEX_LOGS_DB || "C:\\Users\\koban\\.codex\\logs_2.sqlite";
 const scanIntervalMs = Number(process.env.CODEX_STATUS_SCAN_INTERVAL_MS || 30000);
 const maxScannedFiles = Number(process.env.CODEX_STATUS_MAX_FILES || 2000);
+const limitsIntervalMs = Number(process.env.CODEX_LIMITS_REFRESH_MS || 300000);
 let statusCache = null;
 let statusCacheAt = 0;
 let scanInProgress = false;
+let limitsCache = null;
+let limitsCacheAt = 0;
 
 const ignoredNames = new Set([
   ".git",
@@ -114,6 +124,118 @@ function commandLog() {
     });
 }
 
+function parseRateLimitEvent(body) {
+  const marker = "websocket event:";
+  const markerAt = body.indexOf(marker);
+  if (markerAt === -1) return null;
+  const jsonStart = body.indexOf("{", markerAt);
+  if (jsonStart === -1) return null;
+  const raw = body.slice(jsonStart).trim();
+  try {
+    const event = JSON.parse(raw);
+    if (event.type !== "codex.rate_limits" || !event.rate_limits) return null;
+    return event;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeWindow(raw, fallbackLabel) {
+  if (!raw) return null;
+  const usedPercent = Number(raw.used_percent);
+  const resetAtSeconds = Number(raw.reset_at);
+  const resetAfterSeconds = Number(raw.reset_after_seconds);
+  const windowMinutes = Number(raw.window_minutes);
+  const resetAt = Number.isFinite(resetAtSeconds)
+    ? new Date(resetAtSeconds * 1000).toISOString()
+    : null;
+  return {
+    label: fallbackLabel,
+    usedPercent: Number.isFinite(usedPercent) ? Math.max(0, Math.min(100, Math.round(usedPercent))) : null,
+    leftPercent: Number.isFinite(usedPercent) ? Math.max(0, Math.min(100, 100 - Math.round(usedPercent))) : null,
+    windowMinutes: Number.isFinite(windowMinutes) ? windowMinutes : null,
+    resetAfterSeconds: Number.isFinite(resetAfterSeconds) ? resetAfterSeconds : null,
+    resetAt
+  };
+}
+
+function readCodexRateLimits(force = false) {
+  const now = Date.now();
+  if (!force && limitsCache && now - limitsCacheAt < limitsIntervalMs) {
+    return {
+      ...limitsCache,
+      cacheAgeMs: now - limitsCacheAt
+    };
+  }
+
+  const fallback = {
+    ok: false,
+    source: "codex logs",
+    sourcePath: codexLogsDbPath,
+    refreshIntervalMs: limitsIntervalMs,
+    checkedAt: new Date().toISOString(),
+    error: null,
+    planType: null,
+    allowed: null,
+    limitReached: null,
+    primary: null,
+    secondary: null
+  };
+
+  if (!DatabaseSync) {
+    limitsCache = { ...fallback, error: "node:sqlite is not available in this Node runtime" };
+    limitsCacheAt = now;
+    return limitsCache;
+  }
+
+  if (!fs.existsSync(codexLogsDbPath)) {
+    limitsCache = { ...fallback, error: "Codex logs DB not found" };
+    limitsCacheAt = now;
+    return limitsCache;
+  }
+
+  try {
+    const db = new DatabaseSync(codexLogsDbPath, { readOnly: true });
+    const rows = db.prepare(`
+      select ts, feedback_log_body
+      from logs
+      where feedback_log_body like '%"type":"codex.rate_limits"%'
+      order by id desc
+      limit 50
+    `).all();
+    db.close();
+
+    for (const row of rows) {
+      const event = parseRateLimitEvent(String(row.feedback_log_body || ""));
+      if (!event) continue;
+      const rateLimits = event.rate_limits || {};
+      limitsCache = {
+        ok: true,
+        source: "codex logs websocket event",
+        sourcePath: codexLogsDbPath,
+        refreshIntervalMs: limitsIntervalMs,
+        checkedAt: new Date().toISOString(),
+        eventTs: row.ts,
+        planType: event.plan_type || null,
+        allowed: typeof rateLimits.allowed === "boolean" ? rateLimits.allowed : null,
+        limitReached: typeof rateLimits.limit_reached === "boolean" ? rateLimits.limit_reached : null,
+        primary: normalizeWindow(rateLimits.primary, "Rolling 5-hour limit"),
+        secondary: normalizeWindow(rateLimits.secondary, "Rolling weekly limit")
+      };
+      limitsCacheAt = now;
+      return limitsCache;
+    }
+
+    limitsCache = { ...fallback, error: "No codex.rate_limits event found yet" };
+    limitsCacheAt = now;
+    return limitsCache;
+  } catch (error) {
+    limitsCache = { ...fallback, error: error.message };
+    limitsCacheAt = now;
+    return limitsCache;
+  }
+}
+
 function buildStatus() {
   const files = scan(root).sort((a, b) => b.mtimeMs - a.mtimeMs);
   const changedSinceStart = files.filter((file) => file.mtimeMs >= startedAt.getTime());
@@ -149,6 +271,7 @@ function buildStatus() {
     changedSinceStart: changedSinceStart.slice(0, 30),
     artifacts: artifacts.slice(0, 30),
     commands: logs,
+    limits: readCodexRateLimits(false),
     state
   };
 }
@@ -217,6 +340,10 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "GET" && url.pathname === "/api/status") {
       return send(res, 200, JSON.stringify(status(url.searchParams.get("refresh") === "1"), null, 2));
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/limits") {
+      return send(res, 200, JSON.stringify(readCodexRateLimits(url.searchParams.get("refresh") === "1"), null, 2));
     }
 
     if (req.method === "POST" && url.pathname === "/api/state") {

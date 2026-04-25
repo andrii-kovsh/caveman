@@ -17,3 +17,4 @@ Session visibility preference:
 - Prefer `open-codex-dashboard-low-gpu.vbs` when opening the dashboard UI; it launches a browser app window without CPU-forced rendering flags.
 - Use `set-dashboard-browser-igpu-preference.ps1` to ask Windows to run Edge/Chrome on the power-saving integrated GPU. This may affect that browser executable globally, not only the dashboard tab.
 - The status server must stay low-resource: cached scans default to 30 seconds and max 2000 files. Avoid returning to 2-second full recursive scans.
+- Usage limits are now sourced from local Codex `codex.rate_limits` websocket events in `C:\Users\koban\.codex\logs_2.sqlite`, exposed through `/api/limits`, and refreshed in the UI about every 5 minutes.

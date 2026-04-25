@@ -174,6 +174,20 @@
       color: var(--muted);
       font-size: 12px;
     }
+    .quota-source {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 8px;
+    }
+    .status-pill {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 3px 8px;
+      background: #0c0e12;
+    }
     .layout {
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(380px, .72fr);
@@ -323,9 +337,14 @@
       <div class="quota-header">
         <div>
           <h2>Codex Usage Limits</h2>
-          <p class="small">Ручний контроль: внеси відсоток використання з поточного UI/ліміт-повідомлення. Dashboard покаже скільки лишилось до 5 годин і тижня.</p>
+          <p class="small">Автоматично читає локальні Codex websocket events з `logs_2.sqlite`; ручні поля лишаються тільки як fallback.</p>
+          <div class="quota-source">
+            <span id="quotaSource" class="status-pill">Source: loading</span>
+            <span id="quotaUpdated" class="status-pill">Updated: never</span>
+            <span id="quotaPlan" class="status-pill">Plan: unknown</span>
+          </div>
         </div>
-        <button id="saveQuota" type="button">Save limits</button>
+        <button id="refreshLimits" type="button">Refresh limits</button>
       </div>
       <div class="quota-grid">
         <div class="quota-card">
@@ -338,10 +357,10 @@
           </div>
           <div class="meter" aria-hidden="true"><div id="fiveHourMeter" class="meter-fill"></div></div>
           <div class="quota-fields">
-            <label>Used %
+            <label>Used % fallback
               <input id="fiveHourUsed" type="number" min="0" max="100" step="1" value="0">
             </label>
-            <label>Reset / note
+            <label>Reset / note fallback
               <input id="fiveHourReset" placeholder="e.g. 16:30 or after 5h window">
             </label>
           </div>
@@ -358,10 +377,10 @@
           </div>
           <div class="meter" aria-hidden="true"><div id="weeklyMeter" class="meter-fill"></div></div>
           <div class="quota-fields">
-            <label>Used %
+            <label>Used % fallback
               <input id="weeklyUsed" type="number" min="0" max="100" step="1" value="0">
             </label>
-            <label>Reset / note
+            <label>Reset / note fallback
               <input id="weeklyReset" placeholder="e.g. Monday 09:00 or weekly reset">
             </label>
           </div>
@@ -464,6 +483,7 @@
     let latest = null;
     let saveTimer = null;
     let quotaSaveTimer = null;
+    let latestLimits = null;
 
     function setValueClass(id, cls) {
       el(id).className = "value " + cls;
@@ -539,22 +559,50 @@
       }
     }
 
-    function renderQuotaCard(prefix, title) {
-      const used = clampPercent(el(`${prefix}Used`).value);
-      if (String(used) !== el(`${prefix}Used`).value) el(`${prefix}Used`).value = String(used);
-      const left = 100 - used;
+    function formatReset(windowData, fallbackText) {
+      if (windowData && windowData.resetAt) {
+        const reset = new Date(windowData.resetAt);
+        const minutes = windowData.resetAfterSeconds === null ? null : Math.max(0, Math.round(windowData.resetAfterSeconds / 60));
+        return `${reset.toLocaleString()}${minutes === null ? "" : ` · in ~${minutes}m`}`;
+      }
+      return fallbackText;
+    }
+
+    function renderQuotaCard(prefix, title, windowData) {
+      const fallbackUsed = clampPercent(el(`${prefix}Used`).value);
+      if (String(fallbackUsed) !== el(`${prefix}Used`).value) el(`${prefix}Used`).value = String(fallbackUsed);
+      const used = windowData && windowData.usedPercent !== null ? windowData.usedPercent : fallbackUsed;
+      const left = windowData && windowData.leftPercent !== null ? windowData.leftPercent : 100 - used;
       const cls = quotaClass(left);
       el(`${prefix}Left`).textContent = `${left}%`;
       el(`${prefix}Left`).className = `quota-percent ${cls}`;
       el(`${prefix}Meter`).style.width = `${used}%`;
       el(`${prefix}Meter`).style.background = left <= 10 ? "var(--bad)" : left <= 30 ? "var(--warn)" : "var(--good)";
-      const reset = el(`${prefix}Reset`).value.trim();
-      el(`${prefix}Hint`).textContent = `${title}: used ${used}%, left ${left}%${reset ? ` · reset/note: ${reset}` : ""}.`;
+      const reset = formatReset(windowData, el(`${prefix}Reset`).value.trim());
+      const source = windowData ? "auto" : "fallback";
+      el(`${prefix}Hint`).textContent = `${title}: used ${used}%, left ${left}% · ${source}${reset ? ` · reset: ${reset}` : ""}.`;
     }
 
     function renderQuota() {
-      renderQuotaCard("fiveHour", "5h window");
-      renderQuotaCard("weekly", "Weekly");
+      const limits = latestLimits || (latest && latest.limits) || null;
+      renderQuotaCard("fiveHour", "5h window", limits && limits.ok ? limits.primary : null);
+      renderQuotaCard("weekly", "Weekly", limits && limits.ok ? limits.secondary : null);
+      if (!limits) {
+        el("quotaSource").textContent = "Source: loading";
+        el("quotaUpdated").textContent = "Updated: never";
+        el("quotaPlan").textContent = "Plan: unknown";
+        return;
+      }
+      latestLimits = limits;
+      el("quotaSource").textContent = limits.ok ? `Source: ${limits.source}` : `Source error: ${limits.error || "unknown"}`;
+      el("quotaUpdated").textContent = limits.checkedAt ? `Updated: ${new Date(limits.checkedAt).toLocaleTimeString()}` : "Updated: unknown";
+      el("quotaPlan").textContent = `Plan: ${limits.planType || "unknown"}${limits.limitReached ? " · limit reached" : ""}`;
+    }
+
+    async function refreshLimits(force = false) {
+      const response = await fetch(`/api/limits${force ? "?refresh=1" : ""}`);
+      latestLimits = await response.json();
+      renderQuota();
     }
 
     async function saveState() {
@@ -594,6 +642,7 @@
 
     function render(data) {
       latest = data;
+      latestLimits = data.limits || latestLimits;
       renderQuota();
       el("serverValue").textContent = "Live";
       setValueClass("serverValue", "good");
@@ -635,7 +684,7 @@
     }));
 
     el("saveState").addEventListener("click", () => saveState().then(refresh).catch(alert));
-    el("saveQuota").addEventListener("click", saveQuotaLocal);
+    el("refreshLimits").addEventListener("click", () => refreshLimits(true).catch(alert));
     el("refreshNow").addEventListener("click", async () => {
       const response = await fetch("/api/status?refresh=1");
       render(await response.json());
@@ -665,7 +714,9 @@
     loadQuota();
     renderQuota();
     refresh();
+    refreshLimits();
     setInterval(refresh, 30000);
+    setInterval(() => refreshLimits().catch(console.error), 300000);
   </script>
 </body>
 </html>

@@ -6,6 +6,7 @@ Local Windows dashboard for tracking Codex workspace activity, QA evidence, arti
 
 - Serves a local dashboard on `http://127.0.0.1:8765`.
 - Tracks workspace files, recent changes, artifacts, and commands run through the dashboard.
+- Reads Codex `codex.rate_limits` websocket events from the local Codex logs database and shows 5-hour / weekly usage.
 - Generates a compact QA status footer for Codex conversations.
 - Runs as a hidden Windows Scheduled Task at logon.
 - Keeps resource use low with cached scans and a file scan limit.
@@ -41,4 +42,4 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\uninstall-codex-dashboard-autost
 
 ## Notes
 
-The dashboard does not infer exact OpenAI or Codex billing, quota, or rate-limit values. Exact quota data should come from official APIs, response headers, or product UI.
+The dashboard reads Codex Desktop rate-limit events from `C:\Users\koban\.codex\logs_2.sqlite` when available. It does not infer billing values.
