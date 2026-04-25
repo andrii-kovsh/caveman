@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codex Live Status</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0f1115;
+      --panel: #171b21;
+      --panel-2: #202630;
+      --text: #e9edf2;
+      --muted: #aab2bd;
+      --line: #303846;
+      --good: #69c779;
+      --warn: #e7b451;
+      --bad: #ef6b73;
+      --info: #6bb7e8;
+      --focus: #d9f275;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 14px/1.45 "Segoe UI", system-ui, sans-serif;
+    }
+    main {
+      width: min(1240px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 22px 0 32px;
+    }
+    header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 14px;
+    }
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      letter-spacing: 0;
+    }
+    .subtitle {
+      margin: 5px 0 0;
+      color: var(--muted);
+      max-width: 820px;
+    }
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    button {
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+      color: var(--text);
+      min-height: 36px;
+      border-radius: 6px;
+      padding: 7px 11px;
+      cursor: pointer;
+      font: inherit;
+    }
+    button:hover, button:focus-visible, input:focus, textarea:focus, select:focus {
+      border-color: var(--focus);
+      outline: none;
+    }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .card, .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    .card {
+      padding: 13px;
+      min-height: 112px;
+    }
+    .label {
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .value {
+      margin-top: 8px;
+      font-size: 28px;
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
+    .hint {
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .good { color: var(--good); }
+    .warn { color: var(--warn); }
+    .bad { color: var(--bad); }
+    .info { color: var(--info); }
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(380px, .72fr);
+      gap: 12px;
+      align-items: start;
+    }
+    .stack {
+      display: grid;
+      gap: 12px;
+    }
+    .panel {
+      padding: 14px;
+      min-width: 0;
+    }
+    .panel h2 {
+      margin: 0 0 10px;
+      font-size: 16px;
+      letter-spacing: 0;
+    }
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    label {
+      display: grid;
+      gap: 5px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    input, select, textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #0c0e12;
+      color: var(--text);
+      padding: 8px 9px;
+      font: inherit;
+    }
+    textarea {
+      min-height: 80px;
+      resize: vertical;
+    }
+    .wide { grid-column: 1 / -1; }
+    .list {
+      display: grid;
+      gap: 6px;
+      max-height: 260px;
+      overflow: auto;
+      padding-right: 3px;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      border: 1px solid var(--line);
+      background: #10141a;
+      border-radius: 6px;
+      padding: 8px;
+    }
+    .path {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .meta {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .footer-box, .command-output {
+      white-space: pre-wrap;
+      background: #0c0e12;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 11px;
+      min-height: 168px;
+      color: #dce2ea;
+      overflow: auto;
+    }
+    .command-output {
+      min-height: 96px;
+      max-height: 220px;
+    }
+    .small {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 9px;
+    }
+    @media (max-width: 1050px) {
+      .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .layout { grid-template-columns: 1fr; }
+      header { display: grid; }
+      .toolbar { justify-content: flex-start; }
+    }
+    @media (max-width: 560px) {
+      main { width: min(100vw - 20px, 1240px); padding-top: 14px; }
+      .cards, .form-grid { grid-template-columns: 1fr; }
+      h1 { font-size: 21px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Codex Live Status</h1>
+        <p class="subtitle">Живий локальний дашборд: кешовано сканує workspace, показує нові файли, артефакти, команди через runner і генерує QA footer.</p>
+      </div>
+      <div class="toolbar">
+        <button id="copyFooter" type="button">Copy footer</button>
+        <button id="saveState" type="button">Save QA fields</button>
+        <button id="refreshNow" type="button">Refresh</button>
+        <button id="shutdown" type="button">Stop server</button>
+      </div>
+    </header>
+
+    <section class="cards" aria-label="Live counters">
+      <div class="card">
+        <div class="label">Server</div>
+        <div id="serverValue" class="value good">Live</div>
+        <div id="serverHint" class="hint">Polling...</div>
+      </div>
+      <div class="card">
+        <div class="label">Files</div>
+        <div id="filesValue" class="value info">0</div>
+        <div class="hint">Current workspace</div>
+      </div>
+      <div class="card">
+        <div class="label">Changed</div>
+        <div id="changedValue" class="value warn">0</div>
+        <div class="hint">Since server start</div>
+      </div>
+      <div class="card">
+        <div class="label">Artifacts</div>
+        <div id="artifactsValue" class="value info">0</div>
+        <div class="hint">Logs, images, docs, data</div>
+      </div>
+      <div class="card">
+        <div class="label">Commands</div>
+        <div id="commandsValue" class="value info">0</div>
+        <div class="hint">Via dashboard runner</div>
+      </div>
+    </section>
+
+    <section class="layout">
+      <div class="stack">
+        <div class="panel">
+          <h2>QA Fields</h2>
+          <div class="form-grid">
+            <label>
+              Context status
+              <select id="contextStatus">
+                <option value="ok">ok</option>
+                <option value="getting large">getting large</option>
+                <option value="risk of detail loss">risk of detail loss</option>
+              </select>
+            </label>
+            <label>
+              Risk
+              <select id="riskStatus">
+                <option value="Low">Low</option>
+                <option value="Medium">Medium</option>
+                <option value="High">High</option>
+              </select>
+            </label>
+            <label class="wide">
+              Verified
+              <textarea id="verified"></textarea>
+            </label>
+            <label class="wide">
+              Evidence
+              <textarea id="evidence"></textarea>
+            </label>
+            <label class="wide">
+              Changed
+              <textarea id="changed"></textarea>
+            </label>
+            <label class="wide">
+              Unverified
+              <textarea id="unverified"></textarea>
+            </label>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Tracked Command Runner</h2>
+          <div class="form-grid">
+            <label class="wide">
+              PowerShell command
+              <input id="commandInput" placeholder="Example: Get-ChildItem -Force">
+            </label>
+          </div>
+          <div class="toolbar" style="justify-content:flex-start;margin:10px 0;">
+            <button id="runCommand" type="button">Run and track</button>
+          </div>
+          <div id="commandOutput" class="command-output">No command run yet.</div>
+          <p class="small">Commands entered here are executed in this workspace and logged with exit code and stdout/stderr tail.</p>
+        </div>
+
+        <div class="panel">
+          <h2>Changed Since Start</h2>
+          <div id="changedList" class="list"></div>
+        </div>
+
+        <div class="panel">
+          <h2>Recent Artifacts</h2>
+          <div id="artifactList" class="list"></div>
+        </div>
+      </div>
+
+      <aside class="stack">
+        <div class="panel">
+          <h2>Generated Footer</h2>
+          <div id="footerBox" class="footer-box" aria-live="polite"></div>
+          <p class="small">Exact quota, billing, or OpenAI rate-limit values are not inferred here.</p>
+        </div>
+
+        <div class="panel">
+          <h2>Recent Commands</h2>
+          <div id="commandList" class="list"></div>
+        </div>
+
+        <div class="panel">
+          <h2>Recent Files</h2>
+          <div id="recentList" class="list"></div>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <script>
+    const ids = ["contextStatus", "riskStatus", "verified", "evidence", "changed", "unverified"];
+    const el = (id) => document.getElementById(id);
+    let latest = null;
+    let saveTimer = null;
+
+    function setValueClass(id, cls) {
+      el(id).className = "value " + cls;
+    }
+
+    function age(iso) {
+      const seconds = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+      if (seconds < 60) return `${seconds}s ago`;
+      const minutes = Math.floor(seconds / 60);
+      if (minutes < 60) return `${minutes}m ago`;
+      return `${Math.floor(minutes / 60)}h ago`;
+    }
+
+    function size(bytes) {
+      if (bytes < 1024) return `${bytes} B`;
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+      return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+    }
+
+    function rows(items, emptyText) {
+      if (!items || !items.length) return `<div class="meta">${emptyText}</div>`;
+      return items.map((item) => `
+        <div class="row">
+          <div class="path" title="${item.path || item.command || ""}">${item.path || item.command || "unknown"}</div>
+          <div class="meta">${item.exitCode !== undefined ? `exit ${item.exitCode}` : `${size(item.size)} · ${age(item.mtime)}`}</div>
+        </div>
+      `).join("");
+    }
+
+    function readState() {
+      return Object.fromEntries(ids.map((id) => [id, el(id).value]));
+    }
+
+    async function saveState() {
+      const response = await fetch("/api/state", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(readState())
+      });
+      if (!response.ok) throw new Error("Save failed");
+    }
+
+    function scheduleSave() {
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => saveState().catch(console.error), 500);
+    }
+
+    function buildFooter(data) {
+      const state = readState();
+      const changed = state.changed.trim() || data.changedSinceStart.slice(0, 8).map((item) => item.path).join("\n") || "none";
+      const evidence = state.evidence.trim() || data.artifacts.slice(0, 8).map((item) => item.path).join("\n") || "none";
+      return [
+        "QA status:",
+        `- Verified: ${state.verified.trim() || "none"}`,
+        `- Evidence: ${evidence}`,
+        `- Changed: ${changed}`,
+        `- Commands: ${data.counters.commands}`,
+        `- Unverified: ${state.unverified.trim() || "none"}`,
+        `- Session/context: ${state.contextStatus}, approximate`
+      ].join("\n");
+    }
+
+    function applyState(state) {
+      ids.forEach((id) => {
+        if (state[id] !== undefined && el(id).value !== state[id]) el(id).value = state[id];
+      });
+    }
+
+    function render(data) {
+      latest = data;
+      el("serverValue").textContent = "Live";
+      setValueClass("serverValue", "good");
+      const cacheAge = data.server.cacheAgeMs === undefined ? "fresh" : `${Math.round(data.server.cacheAgeMs / 1000)}s cache`;
+      const limited = data.server.scanLimited ? " · file scan limited" : "";
+      el("serverHint").textContent = `Started ${age(data.server.startedAt)} · ${cacheAge}${limited}`;
+      el("filesValue").textContent = data.counters.files;
+      el("changedValue").textContent = data.counters.changedSinceStart;
+      el("artifactsValue").textContent = data.counters.artifacts;
+      el("commandsValue").textContent = data.counters.commands;
+      setValueClass("changedValue", data.counters.changedSinceStart ? "warn" : "good");
+      el("changedList").innerHTML = rows(data.changedSinceStart, "No files changed since server start.");
+      el("artifactList").innerHTML = rows(data.artifacts, "No artifacts found.");
+      el("recentList").innerHTML = rows(data.recentFiles, "No files found.");
+      el("commandList").innerHTML = rows(data.commands.slice().reverse(), "No tracked commands yet.");
+      el("footerBox").textContent = buildFooter(data);
+    }
+
+    async function refresh() {
+      try {
+        const response = await fetch("/api/status");
+        const data = await response.json();
+        if (!latest) applyState(data.state || {});
+        render(data);
+      } catch (error) {
+        el("serverValue").textContent = "Offline";
+        setValueClass("serverValue", "bad");
+        el("serverHint").textContent = error.message;
+      }
+    }
+
+    ids.forEach((id) => el(id).addEventListener("input", () => {
+      if (latest) render(latest);
+      scheduleSave();
+    }));
+
+    el("saveState").addEventListener("click", () => saveState().then(refresh).catch(alert));
+    el("refreshNow").addEventListener("click", async () => {
+      const response = await fetch("/api/status?refresh=1");
+      render(await response.json());
+    });
+    el("copyFooter").addEventListener("click", async () => {
+      await navigator.clipboard.writeText(el("footerBox").textContent);
+    });
+    el("shutdown").addEventListener("click", async () => {
+      await fetch("/api/shutdown", { method: "POST" });
+      el("serverValue").textContent = "Stopping";
+      setValueClass("serverValue", "warn");
+    });
+    el("runCommand").addEventListener("click", async () => {
+      const command = el("commandInput").value.trim();
+      if (!command) return;
+      el("commandOutput").textContent = "Running...";
+      const response = await fetch("/api/run", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ command })
+      });
+      const result = await response.json();
+      el("commandOutput").textContent = JSON.stringify(result, null, 2);
+      await refresh();
+    });
+
+    refresh();
+    setInterval(refresh, 30000);
+  </script>
+</body>
+</html>

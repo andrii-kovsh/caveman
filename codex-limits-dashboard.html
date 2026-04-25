@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codex Session Status</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #101114;
+      --panel: #181b20;
+      --panel-2: #20242b;
+      --text: #e8eaed;
+      --muted: #a7adb7;
+      --line: #303640;
+      --good: #69c779;
+      --warn: #e7b451;
+      --bad: #ef6b73;
+      --info: #6bb7e8;
+      --focus: #d9f275;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 14px/1.45 "Segoe UI", system-ui, sans-serif;
+    }
+
+    main {
+      width: min(1180px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 24px 0 32px;
+    }
+
+    header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 650;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      margin: 4px 0 0;
+      color: var(--muted);
+      max-width: 760px;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    button {
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+      color: var(--text);
+      min-height: 36px;
+      border-radius: 6px;
+      padding: 7px 11px;
+      cursor: pointer;
+      font: inherit;
+    }
+
+    button:hover,
+    button:focus-visible {
+      border-color: var(--focus);
+      outline: none;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .card,
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    .card {
+      padding: 14px;
+      min-height: 118px;
+    }
+
+    .label {
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+
+    .value {
+      margin-top: 8px;
+      font-size: 28px;
+      font-weight: 700;
+    }
+
+    .hint {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .good { color: var(--good); }
+    .warn { color: var(--warn); }
+    .bad { color: var(--bad); }
+    .info { color: var(--info); }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(360px, .9fr);
+      gap: 12px;
+      align-items: start;
+    }
+
+    .panel {
+      padding: 14px;
+    }
+
+    .panel h2 {
+      margin: 0 0 12px;
+      font-size: 16px;
+      letter-spacing: 0;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    label {
+      display: grid;
+      gap: 5px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #0d0f12;
+      color: var(--text);
+      padding: 8px 9px;
+      font: inherit;
+    }
+
+    textarea {
+      min-height: 92px;
+      resize: vertical;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+      border-color: var(--focus);
+      outline: none;
+    }
+
+    .wide {
+      grid-column: 1 / -1;
+    }
+
+    .footer-box {
+      white-space: pre-wrap;
+      background: #0d0f12;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      min-height: 210px;
+      color: #d9dee7;
+    }
+
+    .small {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 10px;
+    }
+
+    @media (max-width: 900px) {
+      header,
+      .layout {
+        grid-template-columns: 1fr;
+        display: grid;
+      }
+
+      .grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .toolbar {
+        justify-content: flex-start;
+      }
+    }
+
+    @media (max-width: 560px) {
+      main {
+        width: min(100vw - 20px, 1180px);
+        padding-top: 14px;
+      }
+
+      .grid,
+      .form-grid {
+        grid-template-columns: 1fr;
+      }
+
+      h1 {
+        font-size: 21px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Codex Session Status</h1>
+        <p class="subtitle">Локальна наочна панель для стану діалогу, перевірок, артефактів і приблизного ризику контексту без переходу в налаштування.</p>
+      </div>
+      <div class="toolbar">
+        <button id="copyFooter" type="button">Copy footer</button>
+        <button id="saveState" type="button">Save</button>
+        <button id="resetState" type="button">Reset</button>
+      </div>
+    </header>
+
+    <section class="grid" aria-label="Session summary">
+      <div class="card">
+        <div class="label">Context</div>
+        <div id="contextValue" class="value good">OK</div>
+        <div id="contextHint" class="hint">Approximate</div>
+      </div>
+      <div class="card">
+        <div class="label">Verification</div>
+        <div id="verificationValue" class="value warn">Pending</div>
+        <div class="hint">Based on entered checks</div>
+      </div>
+      <div class="card">
+        <div class="label">Artifacts</div>
+        <div id="artifactValue" class="value info">0</div>
+        <div class="hint">Logs, screenshots, files</div>
+      </div>
+      <div class="card">
+        <div class="label">Open Risk</div>
+        <div id="riskValue" class="value good">Low</div>
+        <div class="hint">Manual QA signal</div>
+      </div>
+    </section>
+
+    <section class="layout">
+      <div class="panel">
+        <h2>Session Inputs</h2>
+        <div class="form-grid">
+          <label>
+            Context status
+            <select id="contextStatus">
+              <option value="ok">ok</option>
+              <option value="getting large">getting large</option>
+              <option value="risk of detail loss">risk of detail loss</option>
+            </select>
+          </label>
+          <label>
+            Risk
+            <select id="riskStatus">
+              <option value="Low">Low</option>
+              <option value="Medium">Medium</option>
+              <option value="High">High</option>
+            </select>
+          </label>
+          <label>
+            Commands run
+            <input id="commandsRun" type="number" min="0" step="1" value="0">
+          </label>
+          <label>
+            Files changed
+            <input id="filesChangedCount" type="number" min="0" step="1" value="0">
+          </label>
+          <label class="wide">
+            Verified
+            <textarea id="verified" placeholder="Example: npm test passed; Playwright screenshot checked; app opened on 127.0.0.1"></textarea>
+          </label>
+          <label class="wide">
+            Evidence
+            <textarea id="evidence" placeholder="Example: ./artifacts/run.log; ./screenshots/home.png; command exit code 0"></textarea>
+          </label>
+          <label class="wide">
+            Changed
+            <textarea id="changed" placeholder="Example: AGENTS.md; src/app.ts; tests/app.spec.ts"></textarea>
+          </label>
+          <label class="wide">
+            Unverified
+            <textarea id="unverified" placeholder="Example: external service not checked; mobile viewport not checked"></textarea>
+          </label>
+        </div>
+      </div>
+
+      <aside class="panel">
+        <h2>Generated Footer</h2>
+        <div id="footerBox" class="footer-box" aria-live="polite"></div>
+        <p class="small">Exact quota or billing limits are not inferred here. Use official API/UI data before writing exact numbers.</p>
+      </aside>
+    </section>
+  </main>
+
+  <script>
+    const ids = [
+      "contextStatus",
+      "riskStatus",
+      "commandsRun",
+      "filesChangedCount",
+      "verified",
+      "evidence",
+      "changed",
+      "unverified"
+    ];
+    const storeKey = "codex-session-status-v1";
+
+    const get = (id) => document.getElementById(id);
+    const lines = (value) => value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const countLines = (value) => lines(value).length;
+
+    function readState() {
+      return Object.fromEntries(ids.map((id) => [id, get(id).value]));
+    }
+
+    function writeState(state) {
+      ids.forEach((id) => {
+        if (state[id] !== undefined) get(id).value = state[id];
+      });
+    }
+
+    function setClass(el, className) {
+      el.className = "value " + className;
+    }
+
+    function render() {
+      const state = readState();
+      const verifiedCount = countLines(state.verified);
+      const artifactCount = countLines(state.evidence);
+      const changedCount = Number(state.filesChangedCount || 0);
+      const contextValue = get("contextValue");
+      const verificationValue = get("verificationValue");
+      const artifactValue = get("artifactValue");
+      const riskValue = get("riskValue");
+
+      contextValue.textContent = state.contextStatus;
+      if (state.contextStatus === "ok") setClass(contextValue, "good");
+      if (state.contextStatus === "getting large") setClass(contextValue, "warn");
+      if (state.contextStatus === "risk of detail loss") setClass(contextValue, "bad");
+      get("contextHint").textContent = "Approximate, unless backed by telemetry";
+
+      verificationValue.textContent = verifiedCount ? "Checked" : "Pending";
+      setClass(verificationValue, verifiedCount ? "good" : "warn");
+
+      artifactValue.textContent = String(artifactCount);
+      setClass(artifactValue, artifactCount ? "info" : "warn");
+
+      riskValue.textContent = state.riskStatus;
+      setClass(riskValue, state.riskStatus === "Low" ? "good" : state.riskStatus === "Medium" ? "warn" : "bad");
+
+      const fallback = "none";
+      const footer = [
+        "QA status:",
+        `- Verified: ${state.verified.trim() || fallback}`,
+        `- Evidence: ${state.evidence.trim() || fallback}`,
+        `- Changed: ${state.changed.trim() || `${changedCount} files`}`,
+        `- Commands: ${state.commandsRun || 0}`,
+        `- Unverified: ${state.unverified.trim() || fallback}`,
+        `- Session/context: ${state.contextStatus}, approximate`
+      ].join("\n");
+
+      get("footerBox").textContent = footer;
+    }
+
+    function save() {
+      localStorage.setItem(storeKey, JSON.stringify(readState()));
+      render();
+    }
+
+    function load() {
+      const raw = localStorage.getItem(storeKey);
+      if (!raw) return;
+      try {
+        writeState(JSON.parse(raw));
+      } catch {
+        localStorage.removeItem(storeKey);
+      }
+    }
+
+    ids.forEach((id) => get(id).addEventListener("input", render));
+    get("saveState").addEventListener("click", save);
+    get("resetState").addEventListener("click", () => {
+      localStorage.removeItem(storeKey);
+      writeState({
+        contextStatus: "ok",
+        riskStatus: "Low",
+        commandsRun: "0",
+        filesChangedCount: "0",
+        verified: "",
+        evidence: "",
+        changed: "",
+        unverified: ""
+      });
+      render();
+    });
+    get("copyFooter").addEventListener("click", async () => {
+      await navigator.clipboard.writeText(get("footerBox").textContent);
+    });
+
+    load();
+    render();
+  </script>
+</body>
+</html>
