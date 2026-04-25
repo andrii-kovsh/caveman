@@ -5,7 +5,10 @@ param(
 
 $ErrorActionPreference = "Continue"
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
-$LogPath = Join-Path $Root ".codex-command-log.jsonl"
+$DataDir = if ($env:CODEX_STATUS_DATA_DIR) { $env:CODEX_STATUS_DATA_DIR } else { "G:\Stuff\musor\codex-live-status-dashboard" }
+$LogDir = if ($env:CODEX_STATUS_LOG_DIR) { $env:CODEX_STATUS_LOG_DIR } else { Join-Path $DataDir "logs" }
+New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
+$LogPath = Join-Path $LogDir "codex-command-log.jsonl"
 $StartedAt = Get-Date
 
 Push-Location $Root

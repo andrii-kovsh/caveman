@@ -12,8 +12,15 @@ try {
 const root = __dirname;
 const port = Number(process.env.CODEX_STATUS_PORT || 8765);
 const startedAt = new Date();
-const statePath = path.join(root, ".codex-status-state.json");
-const commandLogPath = path.join(root, ".codex-command-log.jsonl");
+const defaultDataDir = "G:\\Stuff\\musor\\codex-live-status-dashboard";
+const dataDir = process.env.CODEX_STATUS_DATA_DIR || defaultDataDir;
+const artifactDir = process.env.CODEX_STATUS_ARTIFACT_DIR || path.join(dataDir, "artifacts");
+const logDir = process.env.CODEX_STATUS_LOG_DIR || path.join(dataDir, "logs");
+for (const dir of [dataDir, artifactDir, logDir]) {
+  fs.mkdirSync(dir, { recursive: true });
+}
+const statePath = path.join(dataDir, "codex-status-state.json");
+const commandLogPath = path.join(logDir, "codex-command-log.jsonl");
 const dashboardPath = path.join(root, "codex-live-dashboard.html");
 const codexLogsDbPath = process.env.CODEX_LOGS_DB || "C:\\Users\\koban\\.codex\\logs_2.sqlite";
 const scanIntervalMs = Number(process.env.CODEX_STATUS_SCAN_INTERVAL_MS || 30000);
@@ -86,20 +93,22 @@ function readBody(req) {
   });
 }
 
-function scan(dir, items = []) {
+function scan(dir, items = [], base = root, source = "workspace") {
   if (items.length >= maxScannedFiles) return items;
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     if (ignoredNames.has(entry.name)) continue;
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      scan(full, items);
+      scan(full, items, base, source);
       continue;
     }
     if (items.length >= maxScannedFiles) break;
     const stat = fs.statSync(full);
-    const rel = path.relative(root, full);
+    const rel = path.relative(base, full);
     items.push({
-      path: rel,
+      path: source === "workspace" ? rel : `${source}\\${rel}`,
+      fullPath: full,
+      source,
       size: stat.size,
       mtimeMs: stat.mtimeMs,
       mtime: stat.mtime.toISOString(),
@@ -238,8 +247,14 @@ function readCodexRateLimits(force = false) {
 
 function buildStatus() {
   const files = scan(root).sort((a, b) => b.mtimeMs - a.mtimeMs);
+  const dataFiles = fs.existsSync(dataDir)
+    ? scan(dataDir, [], dataDir, "data").sort((a, b) => b.mtimeMs - a.mtimeMs)
+    : [];
   const changedSinceStart = files.filter((file) => file.mtimeMs >= startedAt.getTime());
-  const artifacts = files.filter((file) => artifactExts.has(file.ext));
+  const artifacts = files
+    .concat(dataFiles)
+    .filter((file) => artifactExts.has(file.ext))
+    .sort((a, b) => b.mtimeMs - a.mtimeMs);
   const state = readJson(statePath, {
     verified: "",
     evidence: "",
@@ -255,6 +270,9 @@ function buildStatus() {
       port,
       startedAt: startedAt.toISOString(),
       now: new Date().toISOString(),
+      dataDir,
+      artifactDir,
+      logDir,
       uptimeSeconds: Math.floor((Date.now() - startedAt.getTime()) / 1000),
       scanIntervalMs,
       maxScannedFiles,

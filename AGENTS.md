@@ -25,3 +25,9 @@ Git workflow preference:
 - Keep logically separate changes as separate commits.
 - Push the work branch and create a pull request for user review before merge.
 - Do not create/push a PR until the remote/auth state is verified and the user has approved the outbound GitHub action.
+
+Storage layout preference:
+- Create new repositories/projects under `G:\Stuff\repos`.
+- Put scratch files, runtime metadata, local DB copies, logs, screenshots, generated images, temporary exports, and other disposable artifacts under `G:\Stuff\musor`.
+- Create scoped subfolders under `G:\Stuff\musor\<project-name>` when a tool needs persistent local state.
+- Do not move app-owned Codex internals such as `C:\Users\koban\.codex\logs_2.sqlite`; read them in place unless the user explicitly asks for a risky migration.
