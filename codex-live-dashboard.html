@@ -276,9 +276,57 @@
       font-size: 12px;
       margin-top: 9px;
     }
+    .resource-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .resource-card {
+      border: 1px solid var(--line);
+      background: #10141a;
+      border-radius: 8px;
+      padding: 12px;
+      min-width: 0;
+    }
+    .resource-card .label {
+      margin-bottom: 7px;
+    }
+    .resource-card .value {
+      margin-top: 0;
+      font-size: 22px;
+    }
+    .resource-meta {
+      display: grid;
+      gap: 4px;
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 8px;
+    }
+    .resource-list {
+      display: grid;
+      gap: 6px;
+      max-height: 220px;
+      overflow: auto;
+      padding-right: 3px;
+    }
+    .resource-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      gap: 8px;
+      border: 1px solid var(--line);
+      background: #10141a;
+      border-radius: 6px;
+      padding: 8px;
+      align-items: baseline;
+    }
+    .resource-row .meta {
+      white-space: nowrap;
+    }
     @media (max-width: 1050px) {
       .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .quota-grid { grid-template-columns: 1fr; }
+      .resource-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .layout { grid-template-columns: 1fr; }
       header { display: grid; }
       .toolbar { justify-content: flex-start; }
@@ -286,6 +334,7 @@
     @media (max-width: 560px) {
       main { width: min(100vw - 20px, 1240px); padding-top: 14px; }
       .cards, .form-grid { grid-template-columns: 1fr; }
+      .resource-grid { grid-template-columns: 1fr; }
       h1 { font-size: 21px; }
     }
   </style>
@@ -389,6 +438,68 @@
       </div>
     </section>
 
+    <section class="panel" aria-label="Resource snapshot">
+      <div class="quota-header">
+        <div>
+          <h2>Resource Snapshot</h2>
+          <p class="small">Кешований snapshot по `Codex`, `msedgewebview2`, `node`, `node_repl`. CPU рахується як короткий 1-секундний delta sample, тому це приблизний live baseline.</p>
+          <div class="quota-source">
+            <span id="resourceUpdated" class="status-pill">Updated: never</span>
+            <span id="resourceHint" class="status-pill">State: loading</span>
+          </div>
+        </div>
+        <button id="refreshResources" type="button">Refresh resources</button>
+      </div>
+      <div class="resource-grid">
+        <div class="resource-card">
+          <div class="label">Codex</div>
+          <div id="codexRam" class="value info">-</div>
+          <div class="resource-meta">
+            <div id="codexCpu">CPU: -</div>
+            <div id="codexGpu">GPU: -</div>
+            <div id="codexCount">Processes: -</div>
+          </div>
+        </div>
+        <div class="resource-card">
+          <div class="label">WebView</div>
+          <div id="webviewRam" class="value info">-</div>
+          <div class="resource-meta">
+            <div id="webviewCpu">CPU: -</div>
+            <div id="webviewGpu">GPU: -</div>
+            <div id="webviewCount">Processes: -</div>
+          </div>
+        </div>
+        <div class="resource-card">
+          <div class="label">Node</div>
+          <div id="nodeRam" class="value info">-</div>
+          <div class="resource-meta">
+            <div id="nodeCpu">CPU: -</div>
+            <div id="nodeGpu">GPU: -</div>
+            <div id="nodeCount">Processes: -</div>
+          </div>
+        </div>
+        <div class="resource-card">
+          <div class="label">Node REPL</div>
+          <div id="nodeReplRam" class="value info">-</div>
+          <div class="resource-meta">
+            <div id="nodeReplCpu">CPU: -</div>
+            <div id="nodeReplGpu">GPU: -</div>
+            <div id="nodeReplCount">Processes: -</div>
+          </div>
+        </div>
+      </div>
+      <div class="layout">
+        <div class="panel">
+          <h2>Top Processes</h2>
+          <div id="processList" class="resource-list"></div>
+        </div>
+        <div class="panel">
+          <h2>Optimization Notes</h2>
+          <div id="resourceNotes" class="resource-list"></div>
+        </div>
+      </div>
+    </section>
+
     <section class="layout">
       <div class="stack">
         <div class="panel">
@@ -484,6 +595,7 @@
     let saveTimer = null;
     let quotaSaveTimer = null;
     let latestLimits = null;
+    let latestResources = null;
 
     function setValueClass(id, cls) {
       el(id).className = "value " + cls;
@@ -605,6 +717,75 @@
       renderQuota();
     }
 
+    function formatGroupRam(group) {
+      if (!group || group.workingSetMB === null || group.workingSetMB === undefined) return "-";
+      return `${Math.round(group.workingSetMB)} MB`;
+    }
+
+    function renderGroup(prefix, group) {
+      el(`${prefix}Ram`).textContent = formatGroupRam(group);
+      el(`${prefix}Cpu`).textContent = `CPU: ${group ? `${group.cpuPercent ?? 0}%` : "-"}`;
+      el(`${prefix}Gpu`).textContent = `GPU: ${group ? `${group.gpuPercent ?? 0}% · ${group.gpuMemoryMB ?? 0} MB` : "-"}`;
+      el(`${prefix}Count`).textContent = `Processes: ${group ? group.count : "-"}`;
+    }
+
+    function buildResourceRow(item) {
+      return `
+        <div class="resource-row">
+          <div class="path">${item.name} · PID ${item.pid}</div>
+          <div class="meta">${item.workingSetMB} MB RAM · ${item.privateMB} MB private</div>
+          <div class="meta">CPU ${item.cpuPercent ?? 0}% · GPU ${item.gpuPercent ?? 0}% · ${item.gpuMemoryMB ?? 0} MB</div>
+        </div>
+      `;
+    }
+
+    function buildResourceNotes(groups) {
+      const notes = [];
+      const codex = groups.codex || groups.codexLower;
+      const webview = groups.webview;
+      const node = groups.node;
+      const nodeRepl = groups.nodeRepl;
+
+      if (codex && codex.workingSetMB >= 1800) notes.push("Codex RAM baseline high. Найбільший виграш дасть менше важких thread UI або перезапуск важкої сесії.");
+      if (webview && webview.workingSetMB >= 500) notes.push("WebView memory high. Частина `msedgewebview2` може бути не від цього dashboard, а від Windows widgets / search / PowerToys.");
+      if (node && node.count >= 4) notes.push("Є кілька `node` процесів. Перед чисткою треба звірити command line, бо частина з них може бути Codex tooling.");
+      if (nodeRepl && nodeRepl.count >= 4) notes.push("`node_repl` процесів багато. Закривати їх варто тільки якщо вони не потрібні поточним MCP/tool call сесіям.");
+      if (codex && (codex.gpuPercent || 0) <= 5) notes.push("Codex GPU тиск невеликий. Перенесення dashboard workload на GPU сенсу не дасть.");
+      if (!notes.length) notes.push("Явних аномалій у tracked groups не видно. Dashboard baseline легкий; main cost зараз не в `status-server.js`.");
+
+      return notes.map((note) => `<div class="row"><div>${note}</div></div>`).join("");
+    }
+
+    function renderResources() {
+      const data = latestResources;
+      if (!data) return;
+      if (!data.ok) {
+        el("resourceUpdated").textContent = data.checkedAt ? `Updated: ${new Date(data.checkedAt).toLocaleTimeString()}` : "Updated: failed";
+        el("resourceHint").textContent = `State: ${data.error || "failed"}`;
+        return;
+      }
+
+      const summary = data.summary || {};
+      renderGroup("codex", summary.codex || summary.codexLower || null);
+      renderGroup("webview", summary.webview || null);
+      renderGroup("node", summary.node || null);
+      renderGroup("nodeRepl", summary.nodeRepl || null);
+      el("resourceUpdated").textContent = `Updated: ${new Date(data.checkedAt).toLocaleTimeString()}`;
+      el("resourceHint").textContent = data.cacheAgeMs === undefined
+        ? "State: fresh sample"
+        : `State: ${Math.round(data.cacheAgeMs / 1000)}s cache`;
+      el("processList").innerHTML = (data.processes || []).length
+        ? data.processes.map(buildResourceRow).join("")
+        : `<div class="row"><div>No tracked processes found.</div></div>`;
+      el("resourceNotes").innerHTML = buildResourceNotes(summary);
+    }
+
+    async function refreshResources(force = false) {
+      const response = await fetch(`/api/resources${force ? "?refresh=1" : ""}`);
+      latestResources = await response.json();
+      renderResources();
+    }
+
     async function saveState() {
       const response = await fetch("/api/state", {
         method: "POST",
@@ -644,6 +825,7 @@
       latest = data;
       latestLimits = data.limits || latestLimits;
       renderQuota();
+      renderResources();
       el("serverValue").textContent = "Live";
       setValueClass("serverValue", "good");
       const cacheAge = data.server.cacheAgeMs === undefined ? "fresh" : `${Math.round(data.server.cacheAgeMs / 1000)}s cache`;
@@ -685,6 +867,7 @@
 
     el("saveState").addEventListener("click", () => saveState().then(refresh).catch(alert));
     el("refreshLimits").addEventListener("click", () => refreshLimits(true).catch(alert));
+    el("refreshResources").addEventListener("click", () => refreshResources(true).catch(alert));
     el("refreshNow").addEventListener("click", async () => {
       const response = await fetch("/api/status?refresh=1");
       render(await response.json());
@@ -715,8 +898,23 @@
     renderQuota();
     refresh();
     refreshLimits();
-    setInterval(refresh, 30000);
-    setInterval(() => refreshLimits().catch(console.error), 300000);
+    refreshResources();
+    setInterval(() => {
+      if (!document.hidden) refresh();
+    }, 30000);
+    setInterval(() => {
+      if (!document.hidden) refreshLimits().catch(console.error);
+    }, 300000);
+    setInterval(() => {
+      if (!document.hidden) refreshResources().catch(console.error);
+    }, 60000);
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) {
+        refresh().catch(console.error);
+        refreshLimits().catch(console.error);
+        refreshResources().catch(console.error);
+      }
+    });
   </script>
 </body>
 </html>

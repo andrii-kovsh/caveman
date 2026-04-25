@@ -26,11 +26,14 @@ const codexLogsDbPath = process.env.CODEX_LOGS_DB || "C:\\Users\\koban\\.codex\\
 const scanIntervalMs = Number(process.env.CODEX_STATUS_SCAN_INTERVAL_MS || 30000);
 const maxScannedFiles = Number(process.env.CODEX_STATUS_MAX_FILES || 2000);
 const limitsIntervalMs = Number(process.env.CODEX_LIMITS_REFRESH_MS || 300000);
+const resourceIntervalMs = Number(process.env.CODEX_RESOURCE_REFRESH_MS || 60000);
 let statusCache = null;
 let statusCacheAt = 0;
 let scanInProgress = false;
 let limitsCache = null;
 let limitsCacheAt = 0;
+let resourcesCache = null;
+let resourcesCacheAt = 0;
 
 const ignoredNames = new Set([
   ".git",
@@ -90,6 +93,38 @@ function readBody(req) {
     });
     req.on("end", () => resolve(body));
     req.on("error", reject);
+  });
+}
+
+function runPowerShellJson(command) {
+  return new Promise((resolve, reject) => {
+    const child = spawn("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-Command",
+      command
+    ], {
+      cwd: root,
+      windowsHide: true
+    });
+
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (data) => { stdout += data.toString(); });
+    child.stderr.on("data", (data) => { stderr += data.toString(); });
+    child.on("error", reject);
+    child.on("close", (exitCode) => {
+      if (exitCode !== 0) {
+        reject(new Error(stderr.trim() || `PowerShell exited with ${exitCode}`));
+        return;
+      }
+      try {
+        resolve(JSON.parse(stdout));
+      } catch (error) {
+        reject(new Error(`Failed to parse PowerShell JSON: ${error.message}`));
+      }
+    });
   });
 }
 
@@ -245,6 +280,155 @@ function readCodexRateLimits(force = false) {
   }
 }
 
+async function readResourceSnapshot(force = false) {
+  const now = Date.now();
+  if (!force && resourcesCache && now - resourcesCacheAt < resourceIntervalMs) {
+    return {
+      ...resourcesCache,
+      cacheAgeMs: now - resourcesCacheAt
+    };
+  }
+
+  const psScript = `
+$ErrorActionPreference = 'Stop'
+$sampleDelaySeconds = 1
+$targetNames = @('Codex','codex','msedgewebview2','node','node_repl')
+$cpuCount = [Environment]::ProcessorCount
+
+function Get-TrackedProcessSnapshot {
+  Get-Process -ErrorAction SilentlyContinue |
+    Where-Object { $targetNames -contains $_.ProcessName } |
+    Select-Object Id, ProcessName, CPU, @{Name='WorkingSetMB';Expression={[math]::Round($_.WorkingSet64 / 1MB, 2)}}, @{Name='PrivateMB';Expression={[math]::Round($_.PrivateMemorySize64 / 1MB, 2)}}
+}
+
+$before = Get-TrackedProcessSnapshot
+Start-Sleep -Seconds $sampleDelaySeconds
+$after = Get-TrackedProcessSnapshot
+$beforeById = @{}
+foreach ($item in $before) { $beforeById[[string]$item.Id] = $item }
+
+$procRows = @()
+foreach ($item in $after) {
+  $key = [string]$item.Id
+  $cpuPercent = $null
+  if ($beforeById.ContainsKey($key) -and $null -ne $item.CPU -and $null -ne $beforeById[$key].CPU) {
+    $delta = [double]$item.CPU - [double]$beforeById[$key].CPU
+    $cpuPercent = [math]::Round(([math]::Max(0, $delta) / $sampleDelaySeconds / $cpuCount) * 100, 2)
+  }
+  $procRows += [pscustomobject]@{
+    pid = $item.Id
+    name = $item.ProcessName
+    cpuPercent = $cpuPercent
+    workingSetMB = $item.WorkingSetMB
+    privateMB = $item.PrivateMB
+  }
+}
+
+$groups = $procRows |
+  Group-Object name |
+  ForEach-Object {
+    [pscustomobject]@{
+      name = $_.Name
+      count = $_.Count
+      cpuPercent = [math]::Round((($_.Group | Measure-Object cpuPercent -Sum).Sum), 2)
+      workingSetMB = [math]::Round((($_.Group | Measure-Object workingSetMB -Sum).Sum), 2)
+      privateMB = [math]::Round((($_.Group | Measure-Object privateMB -Sum).Sum), 2)
+    }
+  } |
+  Sort-Object workingSetMB -Descending
+
+$trackedPids = @{}
+foreach ($item in $procRows) { $trackedPids[[string]$item.pid] = $true }
+
+$gpuByPid = @{}
+try {
+  Get-CimInstance Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine -ErrorAction Stop |
+    Where-Object { $_.Name -match 'pid_([0-9]+)' -and $_.UtilizationPercentage -gt 0 } |
+    ForEach-Object {
+      $procId = $Matches[1]
+      if (-not $trackedPids.ContainsKey($procId)) { return }
+      if (-not $gpuByPid.ContainsKey($procId)) { $gpuByPid[$procId] = 0 }
+      $gpuByPid[$procId] += [double]$_.UtilizationPercentage
+    }
+} catch {}
+
+$gpuMemByPid = @{}
+try {
+  Get-Counter '\\GPU Process Memory(*)\\Local Usage' -ErrorAction Stop |
+    Select-Object -ExpandProperty CounterSamples |
+    Where-Object { $_.InstanceName -match 'pid_([0-9]+)' } |
+    ForEach-Object {
+      $procId = $Matches[1]
+      if (-not $trackedPids.ContainsKey($procId)) { return }
+      if (-not $gpuMemByPid.ContainsKey($procId)) { $gpuMemByPid[$procId] = 0 }
+      $gpuMemByPid[$procId] += [double]$_.CookedValue
+    }
+} catch {}
+
+$processes = $procRows |
+  ForEach-Object {
+    $procId = [string]$_.pid
+    [pscustomobject]@{
+      pid = $_.pid
+      name = $_.name
+      cpuPercent = $_.cpuPercent
+      workingSetMB = $_.workingSetMB
+      privateMB = $_.privateMB
+      gpuPercent = if ($gpuByPid.ContainsKey($procId)) { [math]::Round($gpuByPid[$procId], 2) } else { 0 }
+      gpuMemoryMB = if ($gpuMemByPid.ContainsKey($procId)) { [math]::Round($gpuMemByPid[$procId] / 1MB, 2) } else { 0 }
+    }
+  } |
+  Sort-Object workingSetMB -Descending
+
+$groupMetrics = @{}
+foreach ($group in $groups) {
+  $name = $group.name
+  $matching = @($processes | Where-Object name -eq $name)
+  $groupMetrics[$name] = [pscustomobject]@{
+    name = $name
+    count = $group.count
+    cpuPercent = $group.cpuPercent
+    workingSetMB = $group.workingSetMB
+    privateMB = $group.privateMB
+    gpuPercent = [math]::Round((($matching | Measure-Object gpuPercent -Sum).Sum), 2)
+    gpuMemoryMB = [math]::Round((($matching | Measure-Object gpuMemoryMB -Sum).Sum), 2)
+  }
+}
+
+[pscustomobject]@{
+  ok = $true
+  checkedAt = [DateTime]::UtcNow.ToString('o')
+  refreshIntervalMs = ${resourceIntervalMs}
+  groups = $groups
+  processes = $processes | Select-Object -First 12
+  summary = [pscustomobject]@{
+    codex = $groupMetrics['Codex']
+    codexLower = $groupMetrics['codex']
+    webview = $groupMetrics['msedgewebview2']
+    node = $groupMetrics['node']
+    nodeRepl = $groupMetrics['node_repl']
+  }
+} | ConvertTo-Json -Depth 6 -Compress
+`;
+
+  try {
+    resourcesCache = await runPowerShellJson(psScript);
+  } catch (error) {
+    resourcesCache = {
+      ok: false,
+      checkedAt: new Date().toISOString(),
+      refreshIntervalMs: resourceIntervalMs,
+      error: error.message,
+      groups: [],
+      processes: [],
+      summary: {}
+    };
+  }
+
+  resourcesCacheAt = now;
+  return resourcesCache;
+}
+
 function buildStatus() {
   const files = scan(root).sort((a, b) => b.mtimeMs - a.mtimeMs);
   const dataFiles = fs.existsSync(dataDir)
@@ -362,6 +546,10 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "GET" && url.pathname === "/api/limits") {
       return send(res, 200, JSON.stringify(readCodexRateLimits(url.searchParams.get("refresh") === "1"), null, 2));
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/resources") {
+      return send(res, 200, JSON.stringify(await readResourceSnapshot(url.searchParams.get("refresh") === "1"), null, 2));
     }
 
     if (req.method === "POST" && url.pathname === "/api/state") {
