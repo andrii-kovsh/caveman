@@ -2,6 +2,7 @@
 .codex-status-state.json
 status-server.out.log
 status-server.err.log
+artifact-*.png
 node_modules/
 .env
 .DS_Store

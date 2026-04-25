@@ -105,6 +105,75 @@
     .warn { color: var(--warn); }
     .bad { color: var(--bad); }
     .info { color: var(--info); }
+    .quota-panel {
+      margin-bottom: 12px;
+    }
+    .quota-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+      margin-bottom: 12px;
+    }
+    .quota-header h2 {
+      margin: 0;
+      font-size: 16px;
+      letter-spacing: 0;
+    }
+    .quota-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .quota-card {
+      border: 1px solid var(--line);
+      background: #10141a;
+      border-radius: 8px;
+      padding: 12px;
+      min-width: 0;
+    }
+    .quota-topline {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: baseline;
+      margin-bottom: 8px;
+    }
+    .quota-title {
+      font-weight: 700;
+      font-size: 15px;
+    }
+    .quota-percent {
+      font-size: 26px;
+      font-weight: 750;
+    }
+    .meter {
+      height: 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #0c0e12;
+      overflow: hidden;
+    }
+    .meter-fill {
+      width: 0%;
+      height: 100%;
+      background: var(--good);
+      transition: width .18s ease;
+    }
+    .quota-fields {
+      display: grid;
+      grid-template-columns: minmax(90px, .7fr) minmax(0, 1fr);
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .quota-fields label {
+      font-size: 12px;
+    }
+    .quota-note {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
     .layout {
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(380px, .72fr);
@@ -195,6 +264,7 @@
     }
     @media (max-width: 1050px) {
       .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .quota-grid { grid-template-columns: 1fr; }
       .layout { grid-template-columns: 1fr; }
       header { display: grid; }
       .toolbar { justify-content: flex-start; }
@@ -246,6 +316,57 @@
         <div class="label">Commands</div>
         <div id="commandsValue" class="value info">0</div>
         <div class="hint">Via dashboard runner</div>
+      </div>
+    </section>
+
+    <section class="panel quota-panel" aria-label="Codex usage limits">
+      <div class="quota-header">
+        <div>
+          <h2>Codex Usage Limits</h2>
+          <p class="small">Ручний контроль: внеси відсоток використання з поточного UI/ліміт-повідомлення. Dashboard покаже скільки лишилось до 5 годин і тижня.</p>
+        </div>
+        <button id="saveQuota" type="button">Save limits</button>
+      </div>
+      <div class="quota-grid">
+        <div class="quota-card">
+          <div class="quota-topline">
+            <div>
+              <div class="label">5h window</div>
+              <div class="quota-title">Rolling 5-hour limit</div>
+            </div>
+            <div id="fiveHourLeft" class="quota-percent good">100%</div>
+          </div>
+          <div class="meter" aria-hidden="true"><div id="fiveHourMeter" class="meter-fill"></div></div>
+          <div class="quota-fields">
+            <label>Used %
+              <input id="fiveHourUsed" type="number" min="0" max="100" step="1" value="0">
+            </label>
+            <label>Reset / note
+              <input id="fiveHourReset" placeholder="e.g. 16:30 or after 5h window">
+            </label>
+          </div>
+          <div id="fiveHourHint" class="quota-note">Used 0%, left 100%.</div>
+        </div>
+
+        <div class="quota-card">
+          <div class="quota-topline">
+            <div>
+              <div class="label">Weekly</div>
+              <div class="quota-title">Rolling weekly limit</div>
+            </div>
+            <div id="weeklyLeft" class="quota-percent good">100%</div>
+          </div>
+          <div class="meter" aria-hidden="true"><div id="weeklyMeter" class="meter-fill"></div></div>
+          <div class="quota-fields">
+            <label>Used %
+              <input id="weeklyUsed" type="number" min="0" max="100" step="1" value="0">
+            </label>
+            <label>Reset / note
+              <input id="weeklyReset" placeholder="e.g. Monday 09:00 or weekly reset">
+            </label>
+          </div>
+          <div id="weeklyHint" class="quota-note">Used 0%, left 100%.</div>
+        </div>
       </div>
     </section>
 
@@ -337,9 +458,12 @@
 
   <script>
     const ids = ["contextStatus", "riskStatus", "verified", "evidence", "changed", "unverified"];
+    const quotaIds = ["fiveHourUsed", "fiveHourReset", "weeklyUsed", "weeklyReset"];
+    const quotaStoreKey = "codex-live-quota-v1";
     const el = (id) => document.getElementById(id);
     let latest = null;
     let saveTimer = null;
+    let quotaSaveTimer = null;
 
     function setValueClass(id, cls) {
       el(id).className = "value " + cls;
@@ -371,6 +495,66 @@
 
     function readState() {
       return Object.fromEntries(ids.map((id) => [id, el(id).value]));
+    }
+
+    function clampPercent(value) {
+      const parsed = Number(value);
+      if (!Number.isFinite(parsed)) return 0;
+      return Math.max(0, Math.min(100, Math.round(parsed)));
+    }
+
+    function quotaClass(left) {
+      if (left <= 10) return "bad";
+      if (left <= 30) return "warn";
+      return "good";
+    }
+
+    function readQuota() {
+      return Object.fromEntries(quotaIds.map((id) => [id, el(id).value]));
+    }
+
+    function writeQuota(state) {
+      quotaIds.forEach((id) => {
+        if (state[id] !== undefined) el(id).value = state[id];
+      });
+    }
+
+    function saveQuotaLocal() {
+      localStorage.setItem(quotaStoreKey, JSON.stringify(readQuota()));
+      renderQuota();
+    }
+
+    function scheduleQuotaSave() {
+      clearTimeout(quotaSaveTimer);
+      quotaSaveTimer = setTimeout(saveQuotaLocal, 400);
+    }
+
+    function loadQuota() {
+      const raw = localStorage.getItem(quotaStoreKey);
+      if (!raw) return;
+      try {
+        writeQuota(JSON.parse(raw));
+      } catch {
+        localStorage.removeItem(quotaStoreKey);
+      }
+    }
+
+    function renderQuotaCard(prefix, title) {
+      const used = clampPercent(el(`${prefix}Used`).value);
+      if (String(used) !== el(`${prefix}Used`).value) el(`${prefix}Used`).value = String(used);
+      const left = 100 - used;
+      const cls = quotaClass(left);
+      el(`${prefix}Left`).textContent = `${left}%`;
+      el(`${prefix}Left`).className = `quota-percent ${cls}`;
+      el(`${prefix}Meter`).style.width = `${used}%`;
+      el(`${prefix}Meter`).style.background = left <= 10 ? "var(--bad)" : left <= 30 ? "var(--warn)" : "var(--good)";
+      const reset = el(`${prefix}Reset`).value.trim();
+      el(`${prefix}Hint`).textContent = `${title}: used ${used}%, left ${left}%${reset ? ` · reset/note: ${reset}` : ""}.`;
+    }
+
+    function renderQuota() {
+      renderQuotaCard("fiveHour", "5h window");
+      renderQuotaCard("weekly", "Weekly");
     }
 
     async function saveState() {
@@ -410,6 +594,7 @@
 
     function render(data) {
       latest = data;
+      renderQuota();
       el("serverValue").textContent = "Live";
       setValueClass("serverValue", "good");
       const cacheAge = data.server.cacheAgeMs === undefined ? "fresh" : `${Math.round(data.server.cacheAgeMs / 1000)}s cache`;
@@ -444,8 +629,13 @@
       if (latest) render(latest);
       scheduleSave();
     }));
+    quotaIds.forEach((id) => el(id).addEventListener("input", () => {
+      renderQuota();
+      scheduleQuotaSave();
+    }));
 
     el("saveState").addEventListener("click", () => saveState().then(refresh).catch(alert));
+    el("saveQuota").addEventListener("click", saveQuotaLocal);
     el("refreshNow").addEventListener("click", async () => {
       const response = await fetch("/api/status?refresh=1");
       render(await response.json());
@@ -472,6 +662,8 @@
       await refresh();
     });
 
+    loadQuota();
+    renderQuota();
     refresh();
     setInterval(refresh, 30000);
   </script>
