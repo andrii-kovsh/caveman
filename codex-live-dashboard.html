@@ -26,6 +26,24 @@
       background: var(--bg);
       color: var(--text);
       font: 14px/1.45 "Segoe UI", system-ui, sans-serif;
+      position: relative;
+      overflow-x: hidden;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: -1;
+      background:
+        linear-gradient(90deg, rgba(107, 183, 232, 0.05) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(217, 242, 117, 0.04) 1px, transparent 1px);
+      background-size: 44px 44px, 44px 44px;
+      animation: bgDrift 24s linear infinite;
+    }
+    @keyframes bgDrift {
+      from { background-position: 0 0, 0 0; }
+      to { background-position: 44px 22px, -22px 44px; }
     }
     main {
       width: min(1240px, calc(100vw - 32px));
@@ -71,7 +89,7 @@
     }
     .cards {
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 12px;
       margin-bottom: 12px;
     }
@@ -90,6 +108,59 @@
       text-transform: uppercase;
       letter-spacing: .04em;
     }
+    .label-row, .title-row {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+    .help-tip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      font-size: 11px;
+      line-height: 1;
+      color: var(--muted);
+      background: #0c0e12;
+      cursor: help;
+      position: relative;
+      user-select: none;
+    }
+    .help-tip:hover, .help-tip:focus-visible {
+      color: var(--text);
+      border-color: var(--focus);
+      outline: none;
+    }
+    .help-tip::after {
+      content: attr(data-tip);
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      bottom: calc(100% + 8px);
+      width: min(320px, 72vw);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #0c0e12;
+      color: var(--text);
+      padding: 8px;
+      font-size: 12px;
+      line-height: 1.35;
+      white-space: normal;
+      pointer-events: none;
+      opacity: 0;
+      visibility: hidden;
+      z-index: 12;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+    .help-tip:hover::after, .help-tip:focus-visible::after {
+      opacity: 1;
+      visibility: visible;
+    }
     .value {
       margin-top: 8px;
       font-size: 28px;
@@ -107,6 +178,36 @@
     .info { color: var(--info); }
     .quota-panel {
       margin-bottom: 12px;
+    }
+    .core-usage {
+      margin-bottom: 12px;
+    }
+    .core-usage-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .core-usage-card {
+      border: 1px solid var(--line);
+      background: #10141a;
+      border-radius: 8px;
+      padding: 10px;
+      display: grid;
+      gap: 4px;
+    }
+    .core-usage-title {
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .core-usage-value {
+      font-size: 24px;
+      font-weight: 700;
+    }
+    .core-usage-hint {
+      color: var(--muted);
+      font-size: 12px;
     }
     .quota-header {
       display: flex;
@@ -160,6 +261,14 @@
       background: var(--good);
       transition: width .18s ease;
     }
+    .meter-fill.alert-pulse {
+      animation: pulseMeter .6s ease;
+    }
+    @keyframes pulseMeter {
+      0% { filter: brightness(1); }
+      50% { filter: brightness(1.35); }
+      100% { filter: brightness(1); }
+    }
     .quota-fields {
       display: grid;
       grid-template-columns: minmax(90px, .7fr) minmax(0, 1fr);
@@ -187,6 +296,70 @@
       border-radius: 999px;
       padding: 3px 8px;
       background: #0c0e12;
+    }
+    .advanced-only { display: none; }
+    body.show-advanced .advanced-only { display: block; }
+    .mode-pill {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 3px 8px;
+      background: #0c0e12;
+      color: var(--muted);
+      font-size: 12px;
+      align-self: center;
+    }
+    .ua-support {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #10141a;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .ua-hero {
+      border: 1px solid rgba(217, 242, 117, 0.35);
+      border-radius: 8px;
+      background: linear-gradient(90deg, rgba(0, 87, 184, 0.20), rgba(255, 215, 0, 0.18));
+      color: var(--text);
+      padding: 12px 14px;
+      margin-bottom: 12px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .ua-support strong {
+      color: var(--text);
+      font-weight: 600;
+    }
+    .ua-links {
+      display: inline-flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .ua-links a {
+      color: var(--info);
+      text-decoration: none;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 2px 8px;
+      background: #0c0e12;
+      font-size: 12px;
+    }
+    .ua-links a:hover, .ua-links a:focus-visible {
+      border-color: var(--focus);
+      outline: none;
+    }
+    .panel h2::after {
+      content: " 🇺🇦 UA";
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+      margin-left: 4px;
+      white-space: nowrap;
     }
     .layout {
       display: grid;
@@ -303,6 +476,32 @@
       font-size: 12px;
       margin-top: 8px;
     }
+    .mini-meter {
+      margin-top: 8px;
+      display: grid;
+      gap: 5px;
+    }
+    .mini-meter-row {
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr) auto;
+      gap: 6px;
+      align-items: center;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .mini-track {
+      height: 6px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: #0c0e12;
+      overflow: hidden;
+    }
+    .mini-fill {
+      width: 0%;
+      height: 100%;
+      background: var(--info);
+      transition: width .24s ease;
+    }
     .resource-list {
       display: grid;
       gap: 6px;
@@ -325,6 +524,7 @@
     }
     @media (max-width: 1050px) {
       .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .core-usage-grid { grid-template-columns: 1fr; }
       .quota-grid { grid-template-columns: 1fr; }
       .resource-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .layout { grid-template-columns: 1fr; }
@@ -337,6 +537,9 @@
       .resource-grid { grid-template-columns: 1fr; }
       h1 { font-size: 21px; }
     }
+    #coreListsLayout.compact {
+      grid-template-columns: 1fr;
+    }
   </style>
 </head>
 <body>
@@ -347,23 +550,65 @@
         <p class="subtitle">Живий локальний дашборд: кешовано сканує workspace, показує нові файли, артефакти, команди через runner і генерує QA footer.</p>
       </div>
       <div class="toolbar">
-        <button id="copyFooter" type="button">Copy footer</button>
-        <button id="saveState" type="button">Save QA fields</button>
+        <button id="toggleAdvanced" type="button">Advanced: off</button>
+        <button id="autoRefreshToggle" type="button">Pause auto</button>
+        <button id="downloadSnapshot" type="button">Download snapshot</button>
         <button id="refreshNow" type="button">Refresh</button>
-        <button id="shutdown" type="button">Stop server</button>
+        <span id="modePill" class="mode-pill">Core mode</span>
       </div>
     </header>
+
+    <section class="ua-hero" aria-label="Ukraine message">
+      🇺🇦 Україна бореться за свободу. Підтримуй захисників: Повернись живим.
+    </section>
+
+    <section class="ua-support" aria-label="Ukrainian support links">
+      <strong>🇺🇦 UA support active для всіх tool-панелей.</strong>
+      <span>ПЖ лінки:</span>
+      <div class="ua-links">
+        <a href="https://savelife.in.ua/" target="_blank" rel="noopener noreferrer">Повернись живим</a>
+        <a href="https://u24.gov.ua/" target="_blank" rel="noopener noreferrer">UNITED24</a>
+        <a href="https://war.ukraine.ua/" target="_blank" rel="noopener noreferrer">Ukraine.ua</a>
+        <a href="https://diia.gov.ua/" target="_blank" rel="noopener noreferrer">Дія</a>
+      </div>
+    </section>
+
+    <section class="panel advanced-only" aria-label="View controls" style="margin-bottom:12px;">
+      <div class="form-grid">
+        <label>
+          <span class="title-row">Filter rows <span class="help-tip" tabindex="0" data-tip="Фільтр застосовується до path, command, stdout/stderr tail у всіх списках.">?</span></span>
+          <input id="filterText" placeholder="Filter by file path / command / note">
+        </label>
+        <label>
+          <span class="title-row">Max rows per list <span class="help-tip" tabindex="0" data-tip="Ліміт рядків після фільтрації для кожного списку окремо.">?</span></span>
+          <select id="maxRowsSelect">
+            <option value="10">10</option>
+            <option value="20" selected>20</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+        </label>
+        <label>
+          <span class="title-row">Auto refresh <span class="help-tip" tabindex="0" data-tip="Інтервал автозапиту /api/status; limits/resources оновлюються не частіше 60с.">?</span></span>
+          <select id="refreshIntervalSelect">
+            <option value="15000">15s</option>
+            <option value="30000" selected>30s</option>
+            <option value="60000">60s</option>
+            <option value="120000">120s</option>
+          </select>
+        </label>
+        <label>
+          Auto state
+          <input id="autoRefreshState" value="Running" readonly>
+        </label>
+      </div>
+    </section>
 
     <section class="cards" aria-label="Live counters">
       <div class="card">
         <div class="label">Server</div>
         <div id="serverValue" class="value good">Live</div>
         <div id="serverHint" class="hint">Polling...</div>
-      </div>
-      <div class="card">
-        <div class="label">Files</div>
-        <div id="filesValue" class="value info">0</div>
-        <div class="hint">Current workspace</div>
       </div>
       <div class="card">
         <div class="label">Changed</div>
@@ -382,13 +627,37 @@
       </div>
     </section>
 
-    <section class="panel quota-panel" aria-label="Codex usage limits">
+    <section class="panel core-usage" aria-label="Core usage summary">
+      <div class="quota-header" style="margin-bottom:8px;">
+        <div>
+          <h2>Usage Summary</h2>
+          <div class="quota-source">
+            <span id="coreUsageSource" class="status-pill">Source: loading</span>
+            <span id="coreUsageUpdated" class="status-pill">Updated: never</span>
+          </div>
+        </div>
+      </div>
+      <div class="core-usage-grid">
+        <div class="core-usage-card">
+          <div class="core-usage-title">5h left</div>
+          <div id="coreFiveHourLeft" class="core-usage-value good">-</div>
+          <div id="coreFiveHourHint" class="core-usage-hint">Waiting for data...</div>
+        </div>
+        <div class="core-usage-card">
+          <div class="core-usage-title">Weekly left</div>
+          <div id="coreWeeklyLeft" class="core-usage-value good">-</div>
+          <div id="coreWeeklyHint" class="core-usage-hint">Waiting for data...</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel quota-panel advanced-only" aria-label="Codex usage limits">
       <div class="quota-header">
         <div>
-          <h2>Codex Usage Limits</h2>
+          <h2 class="title-row">Codex Usage Limits <span class="help-tip" tabindex="0" data-tip="Ліміти читаються з локальних events; ручні поля нижче — лише fallback.">?</span></h2>
           <p class="small">Автоматично читає локальні Codex websocket events з `logs_2.sqlite`; ручні поля лишаються тільки як fallback.</p>
           <div class="quota-source">
-            <span id="quotaSource" class="status-pill">Source: loading</span>
+            <span id="quotaSource" class="status-pill">Source: loading</span><span class="help-tip" tabindex="0" data-tip="Джерело даних лімітів: auto з events або fallback з локальних полів.">?</span>
             <span id="quotaUpdated" class="status-pill">Updated: never</span>
             <span id="quotaPlan" class="status-pill">Plan: unknown</span>
           </div>
@@ -400,16 +669,16 @@
           <div class="quota-topline">
             <div>
               <div class="label">5h window</div>
-              <div class="quota-title">Rolling 5-hour limit</div>
+              <div class="quota-title title-row">Rolling 5-hour limit <span class="help-tip" tabindex="0" data-tip="Ковзне 5-годинне вікно; left% = доступний запас у поточному вікні.">?</span></div>
             </div>
             <div id="fiveHourLeft" class="quota-percent good">100%</div>
           </div>
           <div class="meter" aria-hidden="true"><div id="fiveHourMeter" class="meter-fill"></div></div>
           <div class="quota-fields">
-            <label>Used % fallback
+            <label><span class="title-row">Used % fallback <span class="help-tip" tabindex="0" data-tip="Ручний % використання, застосовується тільки коли auto-дані недоступні.">?</span></span>
               <input id="fiveHourUsed" type="number" min="0" max="100" step="1" value="0">
             </label>
-            <label>Reset / note fallback
+            <label><span class="title-row">Reset / note fallback <span class="help-tip" tabindex="0" data-tip="Текст reset/нотатки для fallback-режиму; не впливає на auto resetAt.">?</span></span>
               <input id="fiveHourReset" placeholder="e.g. 16:30 or after 5h window">
             </label>
           </div>
@@ -438,10 +707,10 @@
       </div>
     </section>
 
-    <section class="panel" aria-label="Resource snapshot">
+    <section class="panel advanced-only" aria-label="Resource snapshot">
       <div class="quota-header">
         <div>
-          <h2>Resource Snapshot</h2>
+          <h2 class="title-row">Resource Snapshot <span class="help-tip" tabindex="0" data-tip="Зведення по tracked групах процесів; CPU — короткий delta sample, приблизне значення.">?</span></h2>
           <p class="small">Кешований snapshot по `Codex`, `msedgewebview2`, `node`, `node_repl`. CPU рахується як короткий 1-секундний delta sample, тому це приблизний live baseline.</p>
           <div class="quota-source">
             <span id="resourceUpdated" class="status-pill">Updated: never</span>
@@ -459,6 +728,10 @@
             <div id="codexGpu">GPU: -</div>
             <div id="codexCount">Processes: -</div>
           </div>
+          <div class="mini-meter">
+            <div class="mini-meter-row"><span>CPU</span><div class="mini-track"><div id="codexCpuBar" class="mini-fill"></div></div><span id="codexCpuBarLabel">0%</span></div>
+            <div class="mini-meter-row"><span>GPU</span><div class="mini-track"><div id="codexGpuBar" class="mini-fill"></div></div><span id="codexGpuBarLabel">0%</span></div>
+          </div>
         </div>
         <div class="resource-card">
           <div class="label">WebView</div>
@@ -467,6 +740,10 @@
             <div id="webviewCpu">CPU: -</div>
             <div id="webviewGpu">GPU: -</div>
             <div id="webviewCount">Processes: -</div>
+          </div>
+          <div class="mini-meter">
+            <div class="mini-meter-row"><span>CPU</span><div class="mini-track"><div id="webviewCpuBar" class="mini-fill"></div></div><span id="webviewCpuBarLabel">0%</span></div>
+            <div class="mini-meter-row"><span>GPU</span><div class="mini-track"><div id="webviewGpuBar" class="mini-fill"></div></div><span id="webviewGpuBarLabel">0%</span></div>
           </div>
         </div>
         <div class="resource-card">
@@ -477,6 +754,10 @@
             <div id="nodeGpu">GPU: -</div>
             <div id="nodeCount">Processes: -</div>
           </div>
+          <div class="mini-meter">
+            <div class="mini-meter-row"><span>CPU</span><div class="mini-track"><div id="nodeCpuBar" class="mini-fill"></div></div><span id="nodeCpuBarLabel">0%</span></div>
+            <div class="mini-meter-row"><span>GPU</span><div class="mini-track"><div id="nodeGpuBar" class="mini-fill"></div></div><span id="nodeGpuBarLabel">0%</span></div>
+          </div>
         </div>
         <div class="resource-card">
           <div class="label">Node REPL</div>
@@ -486,27 +767,31 @@
             <div id="nodeReplGpu">GPU: -</div>
             <div id="nodeReplCount">Processes: -</div>
           </div>
+          <div class="mini-meter">
+            <div class="mini-meter-row"><span>CPU</span><div class="mini-track"><div id="nodeReplCpuBar" class="mini-fill"></div></div><span id="nodeReplCpuBarLabel">0%</span></div>
+            <div class="mini-meter-row"><span>GPU</span><div class="mini-track"><div id="nodeReplGpuBar" class="mini-fill"></div></div><span id="nodeReplGpuBarLabel">0%</span></div>
+          </div>
         </div>
       </div>
       <div class="layout">
         <div class="panel">
-          <h2>Top Processes</h2>
+          <h2 class="title-row">Top Processes <span class="help-tip" tabindex="0" data-tip="Топ процесів із RAM/CPU/GPU у межах tracked набору, не всі процеси ОС.">?</span></h2>
           <div id="processList" class="resource-list"></div>
         </div>
         <div class="panel">
-          <h2>Optimization Notes</h2>
+          <h2 class="title-row">Optimization Notes <span class="help-tip" tabindex="0" data-tip="Евристичні підказки за порогами; це орієнтир, не діагноз.">?</span></h2>
           <div id="resourceNotes" class="resource-list"></div>
         </div>
       </div>
     </section>
 
-    <section class="layout">
+    <section class="layout" id="coreListsLayout">
       <div class="stack">
-        <div class="panel">
+        <div class="panel advanced-only">
           <h2>QA Fields</h2>
           <div class="form-grid">
             <label>
-              Context status
+              <span class="title-row">Context status <span class="help-tip" tabindex="0" data-tip="Ручна оцінка ризику втрати деталей у поточному контексті сесії.">?</span></span>
               <select id="contextStatus">
                 <option value="ok">ok</option>
                 <option value="getting large">getting large</option>
@@ -526,7 +811,7 @@
               <textarea id="verified"></textarea>
             </label>
             <label class="wide">
-              Evidence
+              <span class="title-row">Evidence <span class="help-tip" tabindex="0" data-tip="Шляхи/ID артефактів, що підтверджують перевірку (логи, скріни, snapshot).">?</span></span>
               <textarea id="evidence"></textarea>
             </label>
             <label class="wide">
@@ -534,14 +819,14 @@
               <textarea id="changed"></textarea>
             </label>
             <label class="wide">
-              Unverified
+              <span class="title-row">Unverified <span class="help-tip" tabindex="0" data-tip="Що не перевірено або має залишковий ризик після поточного проходу.">?</span></span>
               <textarea id="unverified"></textarea>
             </label>
           </div>
         </div>
 
-        <div class="panel">
-          <h2>Tracked Command Runner</h2>
+        <div class="panel advanced-only">
+          <h2 class="title-row">Tracked Command Runner <span class="help-tip" tabindex="0" data-tip="Команда виконується в цьому workspace; результат логиться з exit code і stdout/stderr tail.">?</span></h2>
           <div class="form-grid">
             <label class="wide">
               PowerShell command
@@ -566,19 +851,19 @@
         </div>
       </div>
 
-      <aside class="stack">
-        <div class="panel">
-          <h2>Generated Footer</h2>
+      <aside class="stack advanced-only" id="advancedAside">
+        <div class="panel advanced-only">
+          <h2 class="title-row">Generated Footer <span class="help-tip" tabindex="0" data-tip="Автозведення QA-полів і лічильників; quota/rate-limit значення тут не обчислюються точно.">?</span></h2>
           <div id="footerBox" class="footer-box" aria-live="polite"></div>
           <p class="small">Exact quota, billing, or OpenAI rate-limit values are not inferred here.</p>
         </div>
 
-        <div class="panel">
+        <div class="panel advanced-only">
           <h2>Recent Commands</h2>
           <div id="commandList" class="list"></div>
         </div>
 
-        <div class="panel">
+        <div class="panel advanced-only">
           <h2>Recent Files</h2>
           <div id="recentList" class="list"></div>
         </div>
@@ -590,15 +875,59 @@
     const ids = ["contextStatus", "riskStatus", "verified", "evidence", "changed", "unverified"];
     const quotaIds = ["fiveHourUsed", "fiveHourReset", "weeklyUsed", "weeklyReset"];
     const quotaStoreKey = "codex-live-quota-v1";
+    const uiStoreKey = "codex-live-ui-v1";
     const el = (id) => document.getElementById(id);
     let latest = null;
     let saveTimer = null;
     let quotaSaveTimer = null;
+    let uiSaveTimer = null;
     let latestLimits = null;
     let latestResources = null;
+    let pollTimer = null;
+    let lastLimitsAt = 0;
+    let lastResourcesAt = 0;
+    let autoRefreshEnabled = true;
+    let advancedMode = false;
+
+    function num(value, fallback = 0) {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : fallback;
+    }
+
+    function setNumericClass(id, className) {
+      const node = el(id);
+      if (!node) return;
+      node.classList.remove("good", "warn", "bad", "info");
+      node.classList.add(className);
+    }
+
+    function renderMiniMeter(prefix, cpuPercent, gpuPercent) {
+      const cpu = Math.max(0, Math.min(100, num(cpuPercent, 0)));
+      const gpu = Math.max(0, Math.min(100, num(gpuPercent, 0)));
+      el(`${prefix}CpuBar`).style.width = `${cpu}%`;
+      el(`${prefix}GpuBar`).style.width = `${gpu}%`;
+      el(`${prefix}CpuBarLabel`).textContent = `${cpu.toFixed(1)}%`;
+      el(`${prefix}GpuBarLabel`).textContent = `${gpu.toFixed(1)}%`;
+      el(`${prefix}CpuBar`).style.background = cpu >= 80 ? "var(--bad)" : cpu >= 45 ? "var(--warn)" : "var(--info)";
+      el(`${prefix}GpuBar`).style.background = gpu >= 80 ? "var(--bad)" : gpu >= 45 ? "var(--warn)" : "var(--good)";
+    }
+
+    function animateMeter(id, used, left) {
+      const meter = el(id);
+      const previous = num(meter.dataset.used || 0, 0);
+      const next = clampPercent(used);
+      meter.style.width = `${next}%`;
+      meter.style.background = left <= 10 ? "var(--bad)" : left <= 30 ? "var(--warn)" : "var(--good)";
+      meter.dataset.used = String(next);
+      if (Math.abs(previous - next) >= 1 && left <= 30) {
+        meter.classList.remove("alert-pulse");
+        void meter.offsetWidth;
+        meter.classList.add("alert-pulse");
+      }
+    }
 
     function setValueClass(id, cls) {
-      el(id).className = "value " + cls;
+      setNumericClass(id, cls);
     }
 
     function age(iso) {
@@ -615,9 +944,38 @@
       return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
     }
 
+    function normalizeFilterText() {
+      return (el("filterText").value || "").trim().toLowerCase();
+    }
+
+    function rowSearchText(item) {
+      return [
+        item.path,
+        item.fullPath,
+        item.command,
+        item.stdoutTail,
+        item.stderrTail
+      ].filter(Boolean).join(" ").toLowerCase();
+    }
+
+    function maxRows() {
+      const parsed = Number(el("maxRowsSelect").value);
+      if (!Number.isFinite(parsed) || parsed <= 0) return 20;
+      return parsed;
+    }
+
+    function applyRowsFilter(items) {
+      const filter = normalizeFilterText();
+      const filtered = !filter
+        ? items
+        : items.filter((item) => rowSearchText(item).includes(filter));
+      return filtered.slice(0, maxRows());
+    }
+
     function rows(items, emptyText) {
-      if (!items || !items.length) return `<div class="meta">${emptyText}</div>`;
-      return items.map((item) => `
+      const filtered = applyRowsFilter(items || []);
+      if (!filtered.length) return `<div class="meta">${emptyText}</div>`;
+      return filtered.map((item) => `
         <div class="row">
           <div class="path" title="${item.path || item.command || ""}">${item.path || item.command || "unknown"}</div>
           <div class="meta">${item.exitCode !== undefined ? `exit ${item.exitCode}` : `${size(item.size)} · ${age(item.mtime)}`}</div>
@@ -661,6 +1019,45 @@
       quotaSaveTimer = setTimeout(saveQuotaLocal, 400);
     }
 
+    function readUiState() {
+      return {
+        filterText: el("filterText").value,
+        maxRowsSelect: el("maxRowsSelect").value,
+        refreshIntervalSelect: el("refreshIntervalSelect").value,
+        autoRefreshEnabled,
+        advancedMode
+      };
+    }
+
+    function writeUiState(state) {
+      if (!state || typeof state !== "object") return;
+      if (state.filterText !== undefined) el("filterText").value = state.filterText;
+      if (state.maxRowsSelect !== undefined) el("maxRowsSelect").value = String(state.maxRowsSelect);
+      if (state.refreshIntervalSelect !== undefined) el("refreshIntervalSelect").value = String(state.refreshIntervalSelect);
+      if (state.autoRefreshEnabled !== undefined) autoRefreshEnabled = Boolean(state.autoRefreshEnabled);
+      if (state.advancedMode !== undefined) advancedMode = Boolean(state.advancedMode);
+    }
+
+    function saveUiLocal() {
+      localStorage.setItem(uiStoreKey, JSON.stringify(readUiState()));
+      updateAutoRefreshUi();
+    }
+
+    function scheduleUiSave() {
+      clearTimeout(uiSaveTimer);
+      uiSaveTimer = setTimeout(saveUiLocal, 300);
+    }
+
+    function loadUi() {
+      const raw = localStorage.getItem(uiStoreKey);
+      if (!raw) return;
+      try {
+        writeUiState(JSON.parse(raw));
+      } catch {
+        localStorage.removeItem(uiStoreKey);
+      }
+    }
+
     function loadQuota() {
       const raw = localStorage.getItem(quotaStoreKey);
       if (!raw) return;
@@ -687,9 +1084,10 @@
       const left = windowData && windowData.leftPercent !== null ? windowData.leftPercent : 100 - used;
       const cls = quotaClass(left);
       el(`${prefix}Left`).textContent = `${left}%`;
-      el(`${prefix}Left`).className = `quota-percent ${cls}`;
-      el(`${prefix}Meter`).style.width = `${used}%`;
-      el(`${prefix}Meter`).style.background = left <= 10 ? "var(--bad)" : left <= 30 ? "var(--warn)" : "var(--good)";
+      const leftEl = el(`${prefix}Left`);
+      leftEl.classList.remove("good", "warn", "bad");
+      leftEl.classList.add(cls);
+      animateMeter(`${prefix}Meter`, used, left);
       const reset = formatReset(windowData, el(`${prefix}Reset`).value.trim());
       const source = windowData ? "auto" : "fallback";
       el(`${prefix}Hint`).textContent = `${title}: used ${used}%, left ${left}% · ${source}${reset ? ` · reset: ${reset}` : ""}.`;
@@ -703,12 +1101,35 @@
         el("quotaSource").textContent = "Source: loading";
         el("quotaUpdated").textContent = "Updated: never";
         el("quotaPlan").textContent = "Plan: unknown";
+        el("coreUsageSource").textContent = "Source: loading";
+        el("coreUsageUpdated").textContent = "Updated: never";
+        el("coreFiveHourLeft").textContent = "-";
+        el("coreWeeklyLeft").textContent = "-";
+        el("coreFiveHourHint").textContent = "Waiting for data...";
+        el("coreWeeklyHint").textContent = "Waiting for data...";
         return;
       }
       latestLimits = limits;
       el("quotaSource").textContent = limits.ok ? `Source: ${limits.source}` : `Source error: ${limits.error || "unknown"}`;
       el("quotaUpdated").textContent = limits.checkedAt ? `Updated: ${new Date(limits.checkedAt).toLocaleTimeString()}` : "Updated: unknown";
       el("quotaPlan").textContent = `Plan: ${limits.planType || "unknown"}${limits.limitReached ? " · limit reached" : ""}`;
+      el("coreUsageSource").textContent = limits.ok ? `Source: ${limits.source}` : `Source error: ${limits.error || "unknown"}`;
+      el("coreUsageUpdated").textContent = limits.checkedAt ? `Updated: ${new Date(limits.checkedAt).toLocaleTimeString()}` : "Updated: unknown";
+
+      const five = limits.ok && limits.primary ? limits.primary : null;
+      const week = limits.ok && limits.secondary ? limits.secondary : null;
+      const fiveLeft = five && five.leftPercent !== null ? five.leftPercent : null;
+      const weekLeft = week && week.leftPercent !== null ? week.leftPercent : null;
+      el("coreFiveHourLeft").textContent = fiveLeft === null ? "-" : `${fiveLeft}%`;
+      el("coreWeeklyLeft").textContent = weekLeft === null ? "-" : `${weekLeft}%`;
+      el("coreFiveHourHint").textContent = five
+        ? `Used ${five.usedPercent}% · reset ${five.resetAt ? new Date(five.resetAt).toLocaleTimeString() : "n/a"}`
+        : "No 5h data";
+      el("coreWeeklyHint").textContent = week
+        ? `Used ${week.usedPercent}% · reset ${week.resetAt ? new Date(week.resetAt).toLocaleDateString() : "n/a"}`
+        : "No weekly data";
+      setNumericClass("coreFiveHourLeft", quotaClass(fiveLeft === null ? 100 : fiveLeft));
+      setNumericClass("coreWeeklyLeft", quotaClass(weekLeft === null ? 100 : weekLeft));
     }
 
     async function refreshLimits(force = false) {
@@ -717,16 +1138,20 @@
       renderQuota();
     }
 
-    function formatGroupRam(group) {
-      if (!group || group.workingSetMB === null || group.workingSetMB === undefined) return "-";
-      return `${Math.round(group.workingSetMB)} MB`;
-    }
-
     function renderGroup(prefix, group) {
-      el(`${prefix}Ram`).textContent = formatGroupRam(group);
-      el(`${prefix}Cpu`).textContent = `CPU: ${group ? `${group.cpuPercent ?? 0}%` : "-"}`;
-      el(`${prefix}Gpu`).textContent = `GPU: ${group ? `${group.gpuPercent ?? 0}% · ${group.gpuMemoryMB ?? 0} MB` : "-"}`;
-      el(`${prefix}Count`).textContent = `Processes: ${group ? group.count : "-"}`;
+      if (!group) {
+        el(`${prefix}Ram`).textContent = "-";
+        el(`${prefix}Cpu`).textContent = "CPU: -";
+        el(`${prefix}Gpu`).textContent = "GPU: -";
+        el(`${prefix}Count`).textContent = "Processes: -";
+        renderMiniMeter(prefix, 0, 0);
+        return;
+      }
+      el(`${prefix}Ram`).textContent = `${Math.round(group.workingSetMB ?? 0)} MB`;
+      el(`${prefix}Cpu`).textContent = `CPU: ${(num(group.cpuPercent, 0)).toFixed(2)}%`;
+      el(`${prefix}Gpu`).textContent = `GPU: ${(num(group.gpuPercent, 0)).toFixed(2)}% · ${(num(group.gpuMemoryMB, 0)).toFixed(2)} MB`;
+      el(`${prefix}Count`).textContent = `Processes: ${num(group.count, 0)}`;
+      renderMiniMeter(prefix, num(group.cpuPercent, 0), num(group.gpuPercent, 0));
     }
 
     function buildResourceRow(item) {
@@ -815,6 +1240,12 @@
       ].join("\n");
     }
 
+    function renderFooterOnly() {
+      if (!latest) return;
+      const footer = el("footerBox");
+      if (footer) footer.textContent = buildFooter(latest);
+    }
+
     function applyState(state) {
       ids.forEach((id) => {
         if (state[id] !== undefined && el(id).value !== state[id]) el(id).value = state[id];
@@ -824,23 +1255,20 @@
     function render(data) {
       latest = data;
       latestLimits = data.limits || latestLimits;
-      renderQuota();
-      renderResources();
       el("serverValue").textContent = "Live";
       setValueClass("serverValue", "good");
       const cacheAge = data.server.cacheAgeMs === undefined ? "fresh" : `${Math.round(data.server.cacheAgeMs / 1000)}s cache`;
       const limited = data.server.scanLimited ? " · file scan limited" : "";
       el("serverHint").textContent = `Started ${age(data.server.startedAt)} · ${cacheAge}${limited}`;
-      el("filesValue").textContent = data.counters.files;
-      el("changedValue").textContent = data.counters.changedSinceStart;
-      el("artifactsValue").textContent = data.counters.artifacts;
-      el("commandsValue").textContent = data.counters.commands;
+      el("changedValue").textContent = String(data.counters.changedSinceStart);
+      el("artifactsValue").textContent = String(data.counters.artifacts);
+      el("commandsValue").textContent = String(data.counters.commands);
       setValueClass("changedValue", data.counters.changedSinceStart ? "warn" : "good");
       el("changedList").innerHTML = rows(data.changedSinceStart, "No files changed since server start.");
       el("artifactList").innerHTML = rows(data.artifacts, "No artifacts found.");
       el("recentList").innerHTML = rows(data.recentFiles, "No files found.");
       el("commandList").innerHTML = rows(data.commands.slice().reverse(), "No tracked commands yet.");
-      el("footerBox").textContent = buildFooter(data);
+      renderFooterOnly();
     }
 
     async function refresh() {
@@ -856,29 +1284,124 @@
       }
     }
 
+    function refreshIntervalMs() {
+      const parsed = Number(el("refreshIntervalSelect").value);
+      if (!Number.isFinite(parsed) || parsed < 5000) return 30000;
+      return parsed;
+    }
+
+    function updateAutoRefreshUi() {
+      el("autoRefreshToggle").textContent = autoRefreshEnabled ? "Pause auto" : "Resume auto";
+      const state = el("autoRefreshState");
+      if (state) state.value = autoRefreshEnabled ? "Running" : "Paused";
+    }
+
+    function applyAdvancedMode() {
+      document.body.classList.toggle("show-advanced", advancedMode);
+      const button = el("toggleAdvanced");
+      if (button) button.textContent = advancedMode ? "Advanced: on" : "Advanced: off";
+      const pill = el("modePill");
+      if (pill) pill.textContent = advancedMode ? "Advanced mode" : "Core mode";
+      const layout = el("coreListsLayout");
+      if (layout) layout.classList.toggle("compact", !advancedMode);
+    }
+
+    function stopTimers() {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+
+    async function runPollingCycle() {
+      await refresh();
+      if (advancedMode) {
+        const now = Date.now();
+        const interval = Math.max(refreshIntervalMs(), 60000);
+        if (now - lastLimitsAt >= interval) {
+          await refreshLimits().catch(console.error);
+          lastLimitsAt = now;
+        }
+        if (now - lastResourcesAt >= interval) {
+          await refreshResources().catch(console.error);
+          lastResourcesAt = now;
+        }
+      }
+    }
+
+    function startPolling() {
+      stopTimers();
+      if (!autoRefreshEnabled) {
+        updateAutoRefreshUi();
+        return;
+      }
+      const interval = refreshIntervalMs();
+      pollTimer = setInterval(() => {
+        if (!document.hidden) runPollingCycle().catch(console.error);
+      }, interval);
+      updateAutoRefreshUi();
+    }
+
+    async function downloadSnapshot() {
+      const [statusRes, limitsRes, resourcesRes] = await Promise.all([
+        fetch("/api/status?refresh=1"),
+        fetch("/api/limits?refresh=1"),
+        fetch("/api/resources?refresh=1")
+      ]);
+      const snapshot = {
+        capturedAt: new Date().toISOString(),
+        status: await statusRes.json(),
+        limits: await limitsRes.json(),
+        resources: await resourcesRes.json(),
+        ui: readUiState()
+      };
+      const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      a.href = url;
+      a.download = `codex-live-snapshot-${stamp}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
     ids.forEach((id) => el(id).addEventListener("input", () => {
-      if (latest) render(latest);
+      renderFooterOnly();
       scheduleSave();
     }));
     quotaIds.forEach((id) => el(id).addEventListener("input", () => {
       renderQuota();
       scheduleQuotaSave();
     }));
+    ["filterText", "maxRowsSelect"].forEach((id) => el(id).addEventListener("input", () => {
+      if (latest) render(latest);
+      scheduleUiSave();
+    }));
+    el("refreshIntervalSelect").addEventListener("change", () => {
+      scheduleUiSave();
+      startPolling();
+    });
 
-    el("saveState").addEventListener("click", () => saveState().then(refresh).catch(alert));
     el("refreshLimits").addEventListener("click", () => refreshLimits(true).catch(alert));
     el("refreshResources").addEventListener("click", () => refreshResources(true).catch(alert));
+    el("toggleAdvanced").addEventListener("click", async () => {
+      advancedMode = !advancedMode;
+      applyAdvancedMode();
+      scheduleUiSave();
+      if (advancedMode) {
+        await refreshLimits().catch(console.error);
+        await refreshResources().catch(console.error);
+      }
+    });
+    el("autoRefreshToggle").addEventListener("click", () => {
+      autoRefreshEnabled = !autoRefreshEnabled;
+      scheduleUiSave();
+      startPolling();
+    });
+    el("downloadSnapshot").addEventListener("click", () => downloadSnapshot().catch(alert));
     el("refreshNow").addEventListener("click", async () => {
       const response = await fetch("/api/status?refresh=1");
       render(await response.json());
-    });
-    el("copyFooter").addEventListener("click", async () => {
-      await navigator.clipboard.writeText(el("footerBox").textContent);
-    });
-    el("shutdown").addEventListener("click", async () => {
-      await fetch("/api/shutdown", { method: "POST" });
-      el("serverValue").textContent = "Stopping";
-      setValueClass("serverValue", "warn");
     });
     el("runCommand").addEventListener("click", async () => {
       const command = el("commandInput").value.trim();
@@ -893,26 +1416,27 @@
       el("commandOutput").textContent = JSON.stringify(result, null, 2);
       await refresh();
     });
+    el("commandInput").addEventListener("keydown", async (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+        event.preventDefault();
+        el("runCommand").click();
+      }
+    });
 
+    loadUi();
     loadQuota();
+    applyAdvancedMode();
+    updateAutoRefreshUi();
     renderQuota();
     refresh();
-    refreshLimits();
-    refreshResources();
-    setInterval(() => {
-      if (!document.hidden) refresh();
-    }, 30000);
-    setInterval(() => {
-      if (!document.hidden) refreshLimits().catch(console.error);
-    }, 300000);
-    setInterval(() => {
-      if (!document.hidden) refreshResources().catch(console.error);
-    }, 60000);
+    if (advancedMode) {
+      refreshLimits();
+      refreshResources();
+    }
+    startPolling();
     document.addEventListener("visibilitychange", () => {
       if (!document.hidden) {
-        refresh().catch(console.error);
-        refreshLimits().catch(console.error);
-        refreshResources().catch(console.error);
+        runPollingCycle().catch(console.error);
       }
     });
   </script>
