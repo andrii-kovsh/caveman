@@ -519,7 +519,19 @@ async function runCommand(payload) {
   child.stdout.on("data", (data) => { stdout += data.toString(); });
   child.stderr.on("data", (data) => { stderr += data.toString(); });
 
-  const exitCode = await new Promise((resolve) => child.on("close", resolve));
+  const exitCode = await new Promise((resolve, reject) => {
+    let settled = false;
+    child.once("error", (error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    });
+    child.once("close", (code) => {
+      if (settled) return;
+      settled = true;
+      resolve(code);
+    });
+  });
   const entry = {
     command,
     exitCode,
