@@ -886,6 +886,7 @@
     let pollTimer = null;
     let lastLimitsAt = 0;
     let lastResourcesAt = 0;
+    let pollInFlight = false;
     let autoRefreshEnabled = true;
     let advancedMode = false;
 
@@ -965,11 +966,11 @@
     }
 
     function applyRowsFilter(items) {
-      const filter = normalizeFilterText();
+      const filter = advancedMode ? normalizeFilterText() : "";
       const filtered = !filter
         ? items
         : items.filter((item) => rowSearchText(item).includes(filter));
-      return filtered.slice(0, maxRows());
+      return filtered.slice(0, advancedMode ? maxRows() : 20);
     }
 
     function rows(items, emptyText) {
@@ -1134,8 +1135,10 @@
 
     async function refreshLimits(force = false) {
       const response = await fetch(`/api/limits${force ? "?refresh=1" : ""}`);
+      if (!response.ok) throw new Error(`Limits request failed: ${response.status}`);
       latestLimits = await response.json();
       renderQuota();
+      return true;
     }
 
     function renderGroup(prefix, group) {
@@ -1207,8 +1210,10 @@
 
     async function refreshResources(force = false) {
       const response = await fetch(`/api/resources${force ? "?refresh=1" : ""}`);
+      if (!response.ok) throw new Error(`Resources request failed: ${response.status}`);
       latestResources = await response.json();
       renderResources();
+      return true;
     }
 
     async function saveState() {
@@ -1274,17 +1279,21 @@
     async function refresh() {
       try {
         const response = await fetch("/api/status");
+        if (!response.ok) throw new Error(`Status request failed: ${response.status}`);
         const data = await response.json();
         if (!latest) applyState(data.state || {});
         render(data);
+        return true;
       } catch (error) {
         el("serverValue").textContent = "Offline";
         setValueClass("serverValue", "bad");
         el("serverHint").textContent = error.message;
+        throw error;
       }
     }
 
     function refreshIntervalMs() {
+      if (!advancedMode) return 30000;
       const parsed = Number(el("refreshIntervalSelect").value);
       if (!Number.isFinite(parsed) || parsed < 5000) return 30000;
       return parsed;
@@ -1312,18 +1321,32 @@
     }
 
     async function runPollingCycle() {
-      await refresh();
-      if (advancedMode) {
-        const now = Date.now();
-        const interval = Math.max(refreshIntervalMs(), 60000);
-        if (now - lastLimitsAt >= interval) {
-          await refreshLimits().catch(console.error);
-          lastLimitsAt = now;
+      if (pollInFlight) return;
+      pollInFlight = true;
+      try {
+        await refresh();
+        if (advancedMode) {
+          const now = Date.now();
+          const interval = Math.max(refreshIntervalMs(), 60000);
+          if (now - lastLimitsAt >= interval) {
+            try {
+              await refreshLimits();
+              lastLimitsAt = Date.now();
+            } catch (error) {
+              console.error(error);
+            }
+          }
+          if (now - lastResourcesAt >= interval) {
+            try {
+              await refreshResources();
+              lastResourcesAt = Date.now();
+            } catch (error) {
+              console.error(error);
+            }
+          }
         }
-        if (now - lastResourcesAt >= interval) {
-          await refreshResources().catch(console.error);
-          lastResourcesAt = now;
-        }
+      } finally {
+        pollInFlight = false;
       }
     }
 
@@ -1346,6 +1369,9 @@
         fetch("/api/limits?refresh=1"),
         fetch("/api/resources?refresh=1")
       ]);
+      if (!statusRes.ok || !limitsRes.ok || !resourcesRes.ok) {
+        throw new Error(`Snapshot request failed: ${statusRes.status}/${limitsRes.status}/${resourcesRes.status}`);
+      }
       const snapshot = {
         capturedAt: new Date().toISOString(),
         status: await statusRes.json(),
@@ -1389,8 +1415,18 @@
       applyAdvancedMode();
       scheduleUiSave();
       if (advancedMode) {
-        await refreshLimits().catch(console.error);
-        await refreshResources().catch(console.error);
+        try {
+          await refreshLimits();
+          lastLimitsAt = Date.now();
+        } catch (error) {
+          console.error(error);
+        }
+        try {
+          await refreshResources();
+          lastResourcesAt = Date.now();
+        } catch (error) {
+          console.error(error);
+        }
       }
     });
     el("autoRefreshToggle").addEventListener("click", () => {
@@ -1400,21 +1436,31 @@
     });
     el("downloadSnapshot").addEventListener("click", () => downloadSnapshot().catch(alert));
     el("refreshNow").addEventListener("click", async () => {
-      const response = await fetch("/api/status?refresh=1");
-      render(await response.json());
+      try {
+        const response = await fetch("/api/status?refresh=1");
+        if (!response.ok) throw new Error(`Refresh request failed: ${response.status}`);
+        render(await response.json());
+      } catch (error) {
+        alert(error.message);
+      }
     });
     el("runCommand").addEventListener("click", async () => {
-      const command = el("commandInput").value.trim();
-      if (!command) return;
-      el("commandOutput").textContent = "Running...";
-      const response = await fetch("/api/run", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ command })
-      });
-      const result = await response.json();
-      el("commandOutput").textContent = JSON.stringify(result, null, 2);
-      await refresh();
+      try {
+        const command = el("commandInput").value.trim();
+        if (!command) return;
+        el("commandOutput").textContent = "Running...";
+        const response = await fetch("/api/run", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ command })
+        });
+        if (!response.ok) throw new Error(`Run command failed: ${response.status}`);
+        const result = await response.json();
+        el("commandOutput").textContent = JSON.stringify(result, null, 2);
+        await refresh();
+      } catch (error) {
+        el("commandOutput").textContent = String(error.message || error);
+      }
     });
     el("commandInput").addEventListener("keydown", async (event) => {
       if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
@@ -1428,14 +1474,14 @@
     applyAdvancedMode();
     updateAutoRefreshUi();
     renderQuota();
-    refresh();
+    refresh().catch(console.error);
     if (advancedMode) {
-      refreshLimits();
-      refreshResources();
+      refreshLimits().then(() => { lastLimitsAt = Date.now(); }).catch(console.error);
+      refreshResources().then(() => { lastResourcesAt = Date.now(); }).catch(console.error);
     }
     startPolling();
     document.addEventListener("visibilitychange", () => {
-      if (!document.hidden) {
+      if (!document.hidden && autoRefreshEnabled) {
         runPollingCycle().catch(console.error);
       }
     });
