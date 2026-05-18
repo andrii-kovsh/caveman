@@ -23,10 +23,11 @@ const statePath = path.join(dataDir, "codex-status-state.json");
 const commandLogPath = path.join(logDir, "codex-command-log.jsonl");
 const dashboardPath = path.join(root, "codex-live-dashboard.html");
 const codexLogsDbPath = process.env.CODEX_LOGS_DB || "C:\\Users\\koban\\.codex\\logs_2.sqlite";
-const scanIntervalMs = Number(process.env.CODEX_STATUS_SCAN_INTERVAL_MS || 30000);
+const scanIntervalMs = Number(process.env.CODEX_STATUS_SCAN_INTERVAL_MS || 120000);
 const maxScannedFiles = Number(process.env.CODEX_STATUS_MAX_FILES || 2000);
 const limitsIntervalMs = Number(process.env.CODEX_LIMITS_REFRESH_MS || 300000);
-const resourceIntervalMs = Number(process.env.CODEX_RESOURCE_REFRESH_MS || 60000);
+const commandBlockLeftPercent = Number(process.env.CODEX_COMMAND_BLOCK_LEFT_PERCENT || 1);
+const resourceIntervalMs = Number(process.env.CODEX_RESOURCE_REFRESH_MS || 300000);
 let statusCache = null;
 let statusCacheAt = 0;
 let scanInProgress = false;
@@ -280,6 +281,25 @@ function readCodexRateLimits(force = false) {
   }
 }
 
+function commandExecutionGuard() {
+  const limits = readCodexRateLimits(true);
+  const leftPercent = Number(limits && limits.primary && limits.primary.leftPercent);
+  const usedPercent = Number(limits && limits.primary && limits.primary.usedPercent);
+  const threshold = Number.isFinite(commandBlockLeftPercent) ? commandBlockLeftPercent : 1;
+  const blocked = Boolean(limits && limits.ok && Number.isFinite(leftPercent) && leftPercent <= threshold);
+  return {
+    blocked,
+    thresholdPercent: threshold,
+    leftPercent: Number.isFinite(leftPercent) ? leftPercent : null,
+    usedPercent: Number.isFinite(usedPercent) ? usedPercent : null,
+    resetAt: limits && limits.primary ? limits.primary.resetAt : null,
+    checkedAt: limits ? limits.checkedAt : null,
+    reason: blocked
+      ? `Execution blocked: rolling 5-hour limit has ${leftPercent}% left (threshold ${threshold}%).`
+      : null
+  };
+}
+
 async function readResourceSnapshot(force = false) {
   const now = Date.now();
   if (!force && resourcesCache && now - resourcesCacheAt < resourceIntervalMs) {
@@ -307,6 +327,15 @@ $after = Get-TrackedProcessSnapshot
 $beforeById = @{}
 foreach ($item in $before) { $beforeById[[string]$item.Id] = $item }
 
+$cimRowsAll = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue
+$cimById = @{}
+$parentNameById = @{}
+foreach ($proc in $cimRowsAll) {
+  $parentNameById[[string]$proc.ProcessId] = $proc.Name
+  $baseName = [IO.Path]::GetFileNameWithoutExtension($proc.Name)
+  if ($targetNames -contains $baseName) { $cimById[[string]$proc.ProcessId] = $proc }
+}
+
 $procRows = @()
 foreach ($item in $after) {
   $key = [string]$item.Id
@@ -315,9 +344,29 @@ foreach ($item in $after) {
     $delta = [double]$item.CPU - [double]$beforeById[$key].CPU
     $cpuPercent = [math]::Round(([math]::Max(0, $delta) / $sampleDelaySeconds / $cpuCount) * 100, 2)
   }
+  $cim = $cimById[$key]
+  $parentPid = if ($null -ne $cim) { $cim.ParentProcessId } else { $null }
+  $parentName = if ($null -ne $parentPid -and $parentNameById.ContainsKey([string]$parentPid)) { $parentNameById[[string]$parentPid] } else { $null }
+  $commandLine = if ($null -ne $cim -and $cim.CommandLine) { ($cim.CommandLine -replace '\\s+', ' ').Trim() } else { $null }
+  $ownerHint = $parentName
+  if ($item.ProcessName -eq 'msedgewebview2' -and $commandLine -match '--webview-exe-name=([^\\s]+)') {
+    $ownerHint = $Matches[1]
+  } elseif ($item.ProcessName -eq 'node' -and $commandLine -match 'codex-mem') {
+    $ownerHint = 'codex-mem'
+  } elseif ($item.ProcessName -eq 'node' -and $commandLine -match 'status-server\\.js') {
+    $ownerHint = 'Codex Live Status'
+  } elseif ($item.ProcessName -eq 'node' -and $commandLine -match 'media-downloader') {
+    $ownerHint = 'Media Tool'
+  } elseif ($item.ProcessName -eq 'node' -and $commandLine -match 'Adobe Creative Cloud Experience') {
+    $ownerHint = 'Adobe CC'
+  }
   $procRows += [pscustomobject]@{
     pid = $item.Id
     name = $item.ProcessName
+    parentPid = $parentPid
+    parentName = $parentName
+    ownerHint = $ownerHint
+    commandLine = $commandLine
     cpuPercent = $cpuPercent
     workingSetMB = $item.WorkingSetMB
     privateMB = $item.PrivateMB
@@ -371,6 +420,10 @@ $processes = $procRows |
     [pscustomobject]@{
       pid = $_.pid
       name = $_.name
+      parentPid = $_.parentPid
+      parentName = $_.parentName
+      ownerHint = $_.ownerHint
+      commandLine = $_.commandLine
       cpuPercent = $_.cpuPercent
       workingSetMB = $_.workingSetMB
       privateMB = $_.privateMB
@@ -400,7 +453,7 @@ foreach ($group in $groups) {
   checkedAt = [DateTime]::UtcNow.ToString('o')
   refreshIntervalMs = ${resourceIntervalMs}
   groups = $groups
-  processes = $processes | Select-Object -First 12
+  processes = $processes | Select-Object -First 20
   summary = [pscustomobject]@{
     codex = $groupMetrics['Codex']
     codexLower = $groupMetrics['codex']
@@ -507,6 +560,22 @@ function status(force = false) {
 async function runCommand(payload) {
   const command = String(payload.command || "").trim();
   if (!command) return { ok: false, error: "Missing command" };
+
+  const guard = commandExecutionGuard();
+  if (guard.blocked) {
+    const now = new Date();
+    const entry = {
+      command,
+      blocked: true,
+      exitCode: null,
+      startedAt: now.toISOString(),
+      finishedAt: now.toISOString(),
+      stdoutTail: "",
+      stderrTail: guard.reason
+    };
+    fs.appendFileSync(commandLogPath, JSON.stringify(entry) + "\n", "utf8");
+    return { ok: false, blocked: true, error: guard.reason, guard, entry };
+  }
 
   const started = new Date();
   const child = spawn("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command], {
